@@ -28,6 +28,12 @@ names(dat)[c(10:17)] = c("peak_gp41", "log_peak_gp41",
                          "peak_gp120", "log_peak_gp120",
                          "gp120_treat", "log_gp120_treat")
 
+## (change the "SHIV.RNAgag_copies_permillion_CD4_RNA_copies" column names for simplicity)
+names(dat)[18:22] = c('RNA_copies_blood_8', 'RNA_copies_blood_56',
+                      'RNA_copies_LN_8', 'RNA_copies_LN_56',
+                      'RNA_copies_RB_56') # RB=rectal_biopsy
+
+
 
 # 1.5 examine covariate distributions and think about transformations
 ## Histograms
@@ -104,4 +110,11 @@ panel.hist <- function(x, ...)
 ## 3.1 viral loads and antibody concentration, in log scale
 pairs(dat[,c(7,9,11,13,15,17)], 
       lower.panel = panel.cor, diag.panel = panel.hist)
+
+
+
+# 4. Look at single-predictor models
+# 4.1 check concordance, the c-statistic
+concordance(Surv(rebound_time_days_post_ati, observed)~log_peak_vl, 
+            data=dat, timewt = "n")
 
