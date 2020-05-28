@@ -8,13 +8,46 @@ library(survminer)
 
 setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
 
-# read in the data and process/re-organize a little bit
+# 1. read in the data and process/re-organize a little bit
 dat = read.csv("reboundp01.csv")
 names(dat)
 
+## (clean up the name of rebound_time)
 names(dat)[16] = "rebound_time_days_post_ati"
 
-# plot KM curve
+## (remove repeated column for "point_ic50_8_weekspost_ATI")
+dat = dat %>% select(-point_ic50_8_weekspost_ATI.1)
+
+## (move the columns on ART interruption, rebound time, and observed indicator
+## to column 3:5, so that columns 6:30 are the covariates)
+dat = dat %>% select(1:2, 15:17, 3:14, 18:30)
+
+## (change the gp41 and gp120 columns naming conventions for simplicity)
+names(dat)[c(10:17)] = c("peak_gp41", "log_peak_gp41",
+                         "gp41_treat", "log_gp41_treat",
+                         "peak_gp120", "log_peak_gp120",
+                         "gp120_treat", "log_gp120_treat")
+
+
+# 1.5 examine covariate distributions and think about transformations
+## Histograms
+for(n in names(dat)[6:30]){
+  hist(dat[,n], main=n)
+}
+
+### Findings:
+# - For viral loads, antibodies, the log scale makes much more sense 
+#   (otherwise range too large)
+# - RNA copies per million: range large (except for LN 56 weeks), 
+#   maybe need to log transform too
+# - point_ic50: also large range (except for 8 weeks post ATI),
+#   maybe need to log transform too
+# - pos_auc doesn't need log transformation?? (seems to be between 0 and 1)
+
+
+
+
+# 2. plot KM curve
 simple_KM = survfit(Surv(rebound_time_days_post_ati, observed)~1, data=dat)
 plot(simple_KM)
 ## prettier versions
@@ -41,3 +74,34 @@ ggsurvplot(
   risk.table.height = 0.25, # Useful to change when you have multiple groups
   ggtheme = theme_bw()      # Change ggplot2 theme
 )
+
+# 3. examine correlation/relationship between covariates
+
+## (Below: some customized functions for "pairs")
+## put (absolute) correlations on the upper panels,
+## with size proportional to the correlations.
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- abs(cor(x, y))
+  txt <- format(c(r, 0.123456789), digits = digits)[1]
+  txt <- paste0(prefix, txt)
+  if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+## put histograms on the diagonal
+panel.hist <- function(x, ...)
+{
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(usr[1:2], 0, 1.5) )
+  h <- hist(x, plot = FALSE)
+  breaks <- h$breaks; nB <- length(breaks)
+  y <- h$counts; y <- y/max(y)
+  rect(breaks[-nB], 0, breaks[-1], y, col = "cyan", ...)
+}
+
+## 3.1 viral loads and antibody concentration, in log scale
+pairs(dat[,c(7,9,11,13,15,17)], 
+      lower.panel = panel.cor, diag.panel = panel.hist)
+
