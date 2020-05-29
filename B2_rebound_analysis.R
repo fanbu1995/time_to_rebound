@@ -119,10 +119,55 @@ panel.hist <- function(x, ...)
 }
 
 ## 3.1 viral loads and antibody concentration, in log scale
-pairs(dat[,c(7,9,11,13,15,17)], 
+# pairs(dat[,c(7,9,11,13,15,17)], 
+#       lower.panel = panel.cor, diag.panel = panel.hist)
+pairs(dat_log %>% select(log_peak_vl:log_gp120_treat), 
       lower.panel = panel.cor, diag.panel = panel.hist)
+### Findings:
+# - GP41 concentration at peak and at treatment PERFECTLY correlated
+# - peak viral load highly correlated with:
+#   - GP120 at treatment
+#   - GP120 at peak
+# - GP120 concentration at peak and at treatment also highly correlated
 
+## 3.2 RNA copies
+pairs(dat_log %>% select(log_RNA_copies_blood_8:log_RNA_copies_RB_56), 
+      lower.panel = panel.cor, diag.panel = panel.hist)
+### Findings:
+# - blood 8 weeks highly correlated with LN 8 weeks
+# - everything else not really highly correlated
 
+## 3.3 Point IC50 and POS_AUC
+pairs(dat_log %>% select(log_point_ic50_0_weekspost_ATI:pos_auc_8_weeks_post_ATI), 
+      lower.panel = panel.cor, diag.panel = panel.hist)
+### Findings:
+# - a LOT of them are highly correlated
+# - eps. measures in consecutive weeks
+# - and IC50 & pos_auc in the same week
+
+## 3.4 Viral loads and RNA copies
+pairs(dat_log %>% select(log_peak_vl,log_vl_treat,log_RNA_copies_blood_8:log_RNA_copies_RB_56), 
+      lower.panel = panel.cor, diag.panel = panel.hist)
+### Findings:
+# - VL at treatment highly correlated with RNA_blood_8, RNA_LN_8
+# - RNA_blood_8 and RNA_LN_8 also highly correlated
+# - peak VL highly correlated with RNA_blood_8
+
+## 3.5 Viral loads and IC50
+pairs(dat_log %>% select(log_peak_vl,log_vl_treat,log_point_ic50_0_weekspost_ATI:log_point_ic50_8_weekspost_ATI), 
+      lower.panel = panel.cor, diag.panel = panel.hist)
+### Not really correlated...
+
+## (also checked antibody concentration and IC50)
+pairs(dat_log %>% select(log_peak_gp41:log_gp120_treat,log_point_ic50_0_weekspost_ATI:log_point_ic50_8_weekspost_ATI), 
+      lower.panel = panel.cor, diag.panel = panel.hist)
+### Not really correlated either...
+## some correlation between peak&treatment GP41 and IC50_8_weeks_post (.58 & .57)
+
+## 3.6 RNA copies and IC50
+pairs(dat_log %>% select(log_RNA_copies_blood_8:log_RNA_copies_RB_56,log_point_ic50_0_weekspost_ATI:log_point_ic50_8_weekspost_ATI), 
+      lower.panel = panel.cor, diag.panel = panel.hist)
+### Not really correlated...
 
 # 4. Look at single-predictor models
 # 4.1 check concordance, the c-statistic
