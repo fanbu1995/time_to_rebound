@@ -170,7 +170,49 @@ pairs(dat_log %>% select(log_RNA_copies_blood_8:log_RNA_copies_RB_56,log_point_i
 ### Not really correlated...
 
 # 4. Look at single-predictor models
+Response = "Surv(rebound_time_days_post_ati, observed)"
+All_covars = names(dat_log)[6:24]
+
 # 4.1 check concordance, the c-statistic
-concordance(Surv(rebound_time_days_post_ati, observed)~log_peak_vl, 
-            data=dat, timewt = "n")
+
+C_stats = NULL
+
+for(v in All_covars){
+  f = as.formula(paste(Response,v,sep = " ~ "))
+  C_v = concordance(f, data=dat_log, timewt = "n")$concordance
+  C_stats = c(C_stats, C_v)
+}
+
+C_stats = data.frame(Predictor = All_covars, Concordance = C_stats)
+
+## show it with descending rank
+C_stats %>% arrange(desc(Concordance))
+
+# Predictor Concordance
+# 1        pos_auc_0_weeks_post_ATI   0.7954545
+# 2  log_point_ic50_0_weekspost_ATI   0.7727273
+# 3  log_point_ic50_8_weekspost_ATI   0.7500000
+# 4                  log_gp41_treat   0.7045455
+# 5  log_point_ic50_2_weekspost_ATI   0.7045455
+# 6  log_point_ic50_4_weekspost_ATI   0.7045455
+# 7                   log_peak_gp41   0.6818182
+# 8        pos_auc_4_weeks_post_ATI   0.6818182
+# 9        pos_auc_2_weeks_post_ATI   0.6477273
+# 10       pos_auc_8_weeks_post_ATI   0.6363636
+# 11        log_RNA_copies_blood_56   0.5909091
+# 12            log_RNA_copies_LN_8   0.5681818
+# 13           log_RNA_copies_LN_56   0.5454545
+# 14                 log_peak_gp120   0.5227273
+# 15         log_RNA_copies_blood_8   0.5227273
+# 16                log_gp120_treat   0.5113636
+# 17                    log_peak_vl   0.4772727
+# 18                   log_vl_treat   0.4772727
+# 19           log_RNA_copies_RB_56   0.4545455
+
+
+# 4.2 Cox Proportional Hazards model
+## one example 
+phmod = coxph(Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI,
+              data = dat_log)
+phmod_summ = summary(phmod)
 
