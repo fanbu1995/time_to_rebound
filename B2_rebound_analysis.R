@@ -1,5 +1,6 @@
 # 05/28/2020
 # first look at the B2 rebound data (cleaned by Yishu Gong)
+# try to reproduce previous analysis (and do a bit more)
 
 ## package and directory setup
 library(tidyverse)
@@ -234,19 +235,19 @@ C_stats %>% arrange(desc(Concordance))
 # 19           log_RNA_copies_RB_56   0.4545455
 
 
-# 4.2 Cox Proportional Hazards model
+# 4.2 Cox Proportional Hazards model (univariate)
 ## one example 
 phmod = coxph(Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI,
               data = dat_log)
 phmod_summ = summary(phmod)
 
-## To Do:
+## Do:
 # For each variable, extract:
 # coef, exp(coef)
 # concordance, LRT p-val, Wald test p-val, Score (log-rank) test p-val
 # AIC, BIC (smaller values --> better)
 
-## Also: some kind of small-sample adjustment on those hypothesis tests??
+## Also (TO DO): some kind of small-sample adjustment on those hypothesis tests??
 
 all_res = NULL
 
@@ -287,6 +288,10 @@ all_res_dat %>% filter(lik_ratio_test < 0.05) %>%
 # 1 log_point_ic50_0_weekspost_ATI
 # 2 log_point_ic50_8_weekspost_ATI
 # 3       pos_auc_0_weeks_post_ATI (this has the strongest evidence of non-zero effects)
+
+## rank the single predictors by AIC
+all_res_dat %>% arrange(AIC) %>% 
+  select(predictor, AIC)
 
 ## Examine two univariate models
 ## 1) predictor: pos_auc_0_weeks_post_ATI
@@ -395,3 +400,98 @@ ggcoxdiagnostics(phmod_ic50_8, type = "deviance",
 ### deviance not too large, though hard to tell (too few points)
 ### Observation 7 has deviance close to 2...
 ### Animal RTp19, rebound time = 7 days
+
+
+# 4.3 Cox Proportional Hazards model (bivariate)
+#     (extend 4.2 with ONE additional predictor)
+
+# 4.3.a: Add another predictor to "pos_auc_0_weeks_post_ATI"
+#        (+ a linear term AND an interaction term)
+#        (select models by AIC)
+
+## Since pos_auc_0_weeks_post_ATI is highly correlated with 
+## - all the other AUCs, and
+## - all the pointi_ic50s
+## we don't consider those predictors as the second one
+## (i.e., only consider VLs, Antibodies, RNA copies)
+
+f_auc0 = "Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI"
+
+Vars = names(dat_log)[6:16]
+AIC_linear = NULL
+AIC_inter = NULL
+for(v in Vars){
+  v_inter = paste0("pos_auc_0_weeks_post_ATI * ",v)
+  f_linear = as.formula(paste(f_auc0,v,sep = " + "))
+  f_inter = as.formula(paste(f_auc0,v,v_inter,sep = " + "))
+  phmod_v_linear = coxph(f_linear, data = dat_log)
+  phmod_v_inter = coxph(f_inter, data = dat_log)
+  AIC_linear = c(AIC_linear, AIC(phmod_v_linear))
+  AIC_inter = c(AIC_inter, AIC(phmod_v_inter))
+}
+
+add_pred_res = data.frame(second_predictor = Vars, 
+                          AIC_linear = AIC_linear,
+                          AIC_interation = AIC_inter)
+
+## using "log_peak_vl" as second predictor is the best choice by far
+## linear term AIC = 19.076
+## (with AUC_0_week only: AIC = 22.97863)
+
+## look a bit more closely at the bivariate model
+phmod_auc0_peakVL = coxph(update(as.formula(f_auc0), ~ . + log_peak_vl), 
+                          data = dat_log)
+summary(phmod_auc0_peakVL)
+### Summary:
+### Concordance: 0.932
+### pos_auc_0_weeks_post_ATI: negative effect on hazard (delays rebound)
+### log_peak_vl: positive effect on hazard (accelerates rebound)
+### ALTHOUGH none of the effects is significantly non-zero
+
+## a) baseline survival curve (at the mean values)
+ggsurvplot(survfit(phmod_auc0_peakVL, data=dat_log), 
+           palette = c("#2E9FDF"),
+           ggtheme = theme_bw())
+# HUGE confidence intervals
+
+## b) survival curves at representative values of each variable
+## i) fix peak VL at mean, vary AUC_0_week
+mean(dat_log$log_peak_vl)
+# [1] 6.005144
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+
+auc0_fit = survfit(phmod_auc0_peakVL, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values,
+                                        log_peak_vl = mean(dat_log$log_peak_vl)))
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "POS AUC \n0 weeks\npost ATI",
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           caption = "Fix log_peak_VL at 6.0 (mean)",
+           ggtheme = theme_bw(base_size = 14))
+
+## ii) fix AUC_0_week at mean, vary log peak VL
+sort(dat_log$log_peak_vl)
+# [1] 4.409933 5.225751 5.788897 5.872156 6.085302 6.158818 6.260071 6.515874
+# [9] 6.522444 7.212188
+mean(dat_log$pos_auc_0_weeks_post_ATI)
+# [1] 0.24949
+peakVL_values = c(5,5.5,6.0,7) # 6 is approximately the mean value
+
+peakVL_fit = survfit(phmod_auc0_peakVL, 
+                     newdata = data.frame(pos_auc_0_weeks_post_ATI = mean(dat_log$pos_auc_0_weeks_post_ATI),
+                                          log_peak_vl = peakVL_values))
+ggsurvplot(peakVL_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "Peak viral load\n(log-scale)",
+           legend.labs=c("5.00", 
+                         "5.50",
+                         "6.00(mean)",
+                         "7.00"),
+           caption = "Fix pos_auc_0_weeks_post_ATI at 0.25 (mean)",
+           ggtheme = theme_bw(base_size = 14))
