@@ -50,7 +50,18 @@ for(n in names(dat)[6:30]){
 #   maybe need to log transform too
 # - pos_auc doesn't need log transformation?? (seems to be between 0 and 1)
 
+## create log scale measurements for:
+# - SHIV RNA copies per million CD4 RNA
+# - point IC 150
+dat = dat %>% 
+  mutate_at(18:26, list(log=log)) %>% 
+  rename_at(vars( contains( "_log") ), list( ~paste("log", gsub("_log", "", .), sep = "_") ))
 
+## also: create a separate dataset with all the log transformations done
+dat_log = dat %>% select(c(1:5,7,9,11,13,15,17,31:39,27:30))
+
+## (save it for usage)
+saveRDS(dat_log,"reboundB2_logTrans.rds")
 
 
 # 2. plot KM curve
