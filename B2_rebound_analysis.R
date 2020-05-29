@@ -216,3 +216,47 @@ phmod = coxph(Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_
               data = dat_log)
 phmod_summ = summary(phmod)
 
+## To Do:
+# For each variable, extract:
+# coef, exp(coef)
+# concordance, LRT p-val, Wald test p-val, Score (log-rank) test p-val
+# AIC, BIC (smaller values --> better)
+
+## Also: some kind of small-sample adjustment on those hypothesis tests??
+
+all_res = NULL
+
+for(v in All_covars){
+  f = as.formula(paste(Response,v,sep = " ~ "))
+  phmod = coxph(f, data=dat_log)
+  phmod_summ = summary(phmod)
+  this_v = c(phmod_summ$coefficients[,c("coef","exp(coef)")],
+             phmod_summ$concordance[1],
+             phmod_summ$logtest["pvalue"] %>% as.numeric(),
+             phmod_summ$waldtest["pvalue"] %>% as.numeric(),
+             phmod_summ$sctest["pvalue"] %>% as.numeric(),
+             AIC(phmod), BIC(phmod))
+  all_res = rbind(all_res, this_v)
+}
+
+all_res_dat = as.data.frame(all_res, row.names = All_covars)
+names(all_res_dat) = c("coef","exp(coef)","concordance",
+                       "lik_ratio_test", "wald_test",
+                       "log_rank_test", "AIC", "BIC")
+all_res_dat
+
+all_res_dat$predictor = All_covars
+
+## look at pvalue < .05 ones
+## log_rank_test
+all_res_dat %>% filter(log_rank_test < 0.05)
+## Wald test
+all_res_dat %>% filter(wald_test < 0.05)
+## likelihood ratio test
+## (said to have best behavior with small sample size)
+all_res_dat %>% filter(lik_ratio_test < 0.05) %>% select(predictor)
+# 1 log_point_ic50_0_weekspost_ATI
+# 2 log_point_ic50_8_weekspost_ATI
+# 3       pos_auc_0_weeks_post_ATI (this has the strongest evidence of non-zero effects)
+
+
