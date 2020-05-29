@@ -64,6 +64,30 @@ dat_log = dat %>% select(c(1:5,7,9,11,13,15,17,31:39,27:30))
 saveRDS(dat_log,"reboundB2_logTrans.rds")
 
 
+# 1.6: Use Martingale residuals to check (non)linearity
+#      and select proper functional forms for the predictors
+#      (only do this for RNA and IC50 covariates in the dataset)
+Response = "Surv(rebound_time_days_post_ati, observed)"
+Vars = names(dat)[18:26]
+for(v in Vars){
+  log_v = paste0("log(",v,")")
+  log_v_2 = paste0("I(log(",v,")^2)")
+  sqrt_v = paste0("sqrt(",v,")")
+  f = as.formula(paste(paste(Response,v,sep = " ~ "),
+                       log_v, log_v_2, sqrt_v, sep=" + "))
+  print(ggcoxfunctional(f, data = dat))
+}
+## Notes on the "ggcoxfunctional" function:
+## Plots Martingale residuals against transformed variables
+## Should expect a linear trend of the points if linearity is satisfied
+
+## Findings:
+## Checked log(), ^2, sqrt()
+## There exists some non-linearity, and transformation doesn't 
+## magically solve it, but log() does shrink the large range
+## and generally makes the trend seem more linear
+
+
 # 2. plot KM curve
 simple_KM = survfit(Surv(rebound_time_days_post_ati, observed)~1, data=dat)
 plot(simple_KM)
@@ -268,10 +292,12 @@ all_res_dat %>% filter(lik_ratio_test < 0.05) %>%
 ## 1) predictor: pos_auc_0_weeks_post_ATI
 phmod_auc0 = coxph(Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI,
                    data = dat_log)
+
 ### 1.a: baseline survival curve (at the MEAN value of pos_auc_0_weeks_post_ATI)
 ### (should be the same as the plain KM curve...?)
 ggsurvplot(survfit(phmod_auc0, data=dat_log), palette = c("#2E9FDF"),
            ggtheme = theme_bw())
+
 ### 1.b: survival curves at certain representative values of pos_auc_0_weeks_post_ATI
 sort(dat_log$pos_auc_0_weeks_post_ATI)
 # [1] 0.1097 0.1474 0.1511 0.2184 0.2512 0.2660 0.2887 0.2959 0.3293 0.4372
@@ -297,8 +323,75 @@ ggsurvplot(auc0_fit, conf.int = FALSE,
            ggtheme = theme_bw(base_size = 14))
 # the confidence bands are HUGE though...
 
+### 1.c: test on Schoenfeld residuals 
+###      (to validate proportional hazard assumption)
+ggcoxzph(cox.zph(phmod_auc0))
+
+### There isn't a clear pattern of residuals accross time
+### p-value = 0.6772 -> no strong evidence against the PH assumption
+
+### Notes on this:
+# The function cox.zph() provides a convenient solution to test the proportional hazards assumption for each covariate included in a Cox refression model fit.
+# 
+# For each covariate, the function cox.zph() correlates the corresponding set of scaled Schoenfeld residuals with time, to test for independence between residuals and time. Additionally, it performs a global test for the model as a whole.
+
+### 1.d: look at influential observations/outliers
+### (using deviance residuals)
+### Note on this:
+###  - Positive values: died too soon
+###  - Negative values: lived too long
+ggcoxdiagnostics(phmod_auc0, type = "deviance",
+                 linear.predictions = FALSE, 
+                 ggtheme = theme_bw())
+### deviance not too large, though hard to tell (too few points)
 
 
 ## 2) predictor: log_point_ic50_8_weekspost_ATI
 ## (not using "log_point_ic50_0_weekspost_ATI" 
 ##  because it is highly correlated with "pos_auc_0_weeks_post_ATI")
+phmod_ic50_8 = coxph(Surv(rebound_time_days_post_ati, observed) ~ log_point_ic50_8_weekspost_ATI,
+                     data = dat_log)
+
+### 2.a: baseline survival curve (at the MEAN value of log_point_ic50_8_weekspost_ATI)
+### (still the same as the plain KM curve...?)
+ggsurvplot(survfit(phmod_ic50_8, data=dat_log), 
+           palette = c("#2E9FDF"),
+           ggtheme = theme_bw())
+
+### 2.b: survival curves at certain representative values of log_point_ic50_8_weekspost_ATI
+sort(dat_log$log_point_ic50_8_weekspost_ATI)
+# [1] 2.998244 3.064655 3.080653 3.087281 3.103271 3.292609 3.380890 3.402849
+# [9] 3.941457 4.055358
+mean(dat_log$log_point_ic50_8_weekspost_ATI)
+# [1] 3.340727
+point_ic50_8_values = c(3.00, 3.34, 3.7, 4.0) # 3.34 is approximately the mean
+
+ic50_8_fit = survfit(phmod_ic50_8, 
+                     newdata = data.frame(log_point_ic50_8_weekspost_ATI =
+                                            point_ic50_8_values))
+ggsurvplot(ic50_8_fit, conf.int = TRUE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "Point IC50 \n8 weeks\npost ATI\n(log-scale)",
+           legend.labs=c("3.00", 
+                         "3.34(mean)",
+                         "3.70",
+                         "4.00"),
+           ggtheme = theme_bw(base_size = 14))
+# the confidence bands are HUGE though...
+
+### 2.c: test on Schoenfeld residuals 
+###      (to validate proportional hazard assumption)
+ggcoxzph(cox.zph(phmod_ic50_8))
+
+### There isn't a clear pattern of residuals accross time
+### p-value = 0.8128 -> no strong evidence against the PH assumption
+
+### 2.d: look at influential observations/outliers
+### (using deviance residuals)
+ggcoxdiagnostics(phmod_ic50_8, type = "deviance",
+                 linear.predictions = FALSE, 
+                 ggtheme = theme_bw())
+### deviance not too large, though hard to tell (too few points)
+### Observation 7 has deviance close to 2...
+### Animal RTp19, rebound time = 7 days
