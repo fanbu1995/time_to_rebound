@@ -248,7 +248,8 @@ all_res_dat
 all_res_dat$predictor = All_covars
 
 ## save the results in the local directory for later usage
-write.csv(all_res_dat,"time_to_rebound/univariate_CoxPH_results.csv")
+write.csv(all_res_dat,"time_to_rebound/univariate_CoxPH_results.csv",
+          row.names = FALSE)
 
 ## look at pvalue < .05 ones
 ## log_rank_test
