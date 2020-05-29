@@ -258,9 +258,47 @@ all_res_dat %>% filter(log_rank_test < 0.05)
 all_res_dat %>% filter(wald_test < 0.05)
 ## likelihood ratio test
 ## (said to have best behavior with small sample size)
-all_res_dat %>% filter(lik_ratio_test < 0.05) %>% select(predictor)
+all_res_dat %>% filter(lik_ratio_test < 0.05) %>% 
+  select(predictor, lik_ratio_test)
 # 1 log_point_ic50_0_weekspost_ATI
 # 2 log_point_ic50_8_weekspost_ATI
 # 3       pos_auc_0_weeks_post_ATI (this has the strongest evidence of non-zero effects)
 
+## Examine two univariate models
+## 1) predictor: pos_auc_0_weeks_post_ATI
+phmod_auc0 = coxph(Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI,
+                   data = dat_log)
+### 1.a: baseline survival curve (at the MEAN value of pos_auc_0_weeks_post_ATI)
+### (should be the same as the plain KM curve...?)
+ggsurvplot(survfit(phmod_auc0, data=dat_log), palette = c("#2E9FDF"),
+           ggtheme = theme_bw())
+### 1.b: survival curves at certain representative values of pos_auc_0_weeks_post_ATI
+sort(dat_log$pos_auc_0_weeks_post_ATI)
+# [1] 0.1097 0.1474 0.1511 0.2184 0.2512 0.2660 0.2887 0.2959 0.3293 0.4372
+mean(dat_log$pos_auc_0_weeks_post_ATI)
+# [1] 0.24949
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+#auc0_values = quantile(dat_log$pos_auc_0_weeks_post_ATI, c(0.25,0.5,0.75))
 
+auc0_fit = survfit(phmod_auc0, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values))
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "POS AUC \n0 weeks\npost ATI",
+           # legend.labs=c("AUC_0_weeks=0.15", 
+           #               "AUC_0_weeks=0.25(mean)",
+           #               "AUC_0_weeks=0.30",
+           #               "AUC_0_weeks=0.40"),
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           ggtheme = theme_bw(base_size = 14))
+# the confidence bands are HUGE though...
+
+
+
+## 2) predictor: log_point_ic50_8_weekspost_ATI
+## (not using "log_point_ic50_0_weekspost_ATI" 
+##  because it is highly correlated with "pos_auc_0_weeks_post_ATI")
