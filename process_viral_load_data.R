@@ -38,7 +38,7 @@ ggplot(data=VL%>%filter(week_infection <= 62),
   scale_x_continuous(breaks = c(0,8,25,50)) +
   theme_bw(base_size = 14)
 
-# get "peak viral load" pre treatment
+# get "peak viral load" PRE treatment
 # by averaging between the largest two values
 # and also acquire the log of that averaged value
 get_top_mean <- function(x, top=2){
@@ -46,7 +46,8 @@ get_top_mean <- function(x, top=2){
 }
 
 # here: use "log_10" (to rematch the previous convention...)
-peak_VL = VL %>% group_by(animal_id) %>%
+peak_VL = VL %>% filter(week_infection <= 62) %>%
+  group_by(animal_id) %>%
   summarise(peak_vl_2 = get_top_mean(viral_load)) %>%
   mutate(log_peak_vl_2 = log(peak_vl_2, base=10))
 
@@ -56,6 +57,7 @@ saveRDS(peak_VL, "peak_viral_load_avg_top2.rds")
 # also combine it with the existing log transformed dataset
 dat_log = readRDS("reboundB2_logTrans.rds")
 dat_log$animal_id = as.character(dat_log$animal_id)
+dat_log$group = as.character(dat_log$group)
 
 dat_log$log_peak_vl_2 = peak_VL$peak_vl_2
 
