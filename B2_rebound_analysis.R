@@ -398,7 +398,7 @@ ggcoxdiagnostics(phmod_ic50_8, type = "deviance",
                  linear.predictions = FALSE, 
                  ggtheme = theme_bw())
 ### deviance not too large, though hard to tell (too few points)
-### Observation 7 has deviance close to 2...
+### Observation 7 has deviance close to 2... (died a bit too soon)
 ### Animal RTp19, rebound time = 7 days
 
 
@@ -495,3 +495,61 @@ ggsurvplot(peakVL_fit, conf.int = FALSE,
                          "7.00"),
            caption = "Fix pos_auc_0_weeks_post_ATI at 0.25 (mean)",
            ggtheme = theme_bw(base_size = 14))
+
+## c) check proportional hazards assumption
+ggcoxzph(cox.zph(phmod_auc0_peakVL))
+# global p-value = 0.06567
+# AUC0 p-value = 0.1651
+# log peak VL p-value = 0.9997
+# Not very strong evidence to refute proportional hazards assumption
+
+## d) look at influential observations/outliers
+##    (using deviance residuals)
+ggcoxdiagnostics(phmod_auc0_peakVL, type = "deviance",
+                 linear.predictions = FALSE, 
+                 ggtheme = theme_bw())
+## deviance quite small --> no obvious outliers
+
+# 4.3.b: exhaustive search of all bivariate models
+#  (still: linear term AND interaction term)
+Response = "Surv(rebound_time_days_post_ati, observed)"
+n_vars = length(All_covars)
+
+Predictor1 = NULL
+Predictor2 = NULL
+AIC_linear = NULL
+AIC_inter = NULL
+for(i in 1:(n_vars-1)){
+  for(j in 2:n_vars){
+    v1 = All_covars[i]
+    v2 = All_covars[j]
+    v_inter = paste0(v1," * ",v2)
+    f_linear = as.formula(paste(Response, 
+                                paste(v1,v2,sep = " + "),
+                                sep = " ~ "))
+    f_inter = as.formula(paste(Response, 
+                               paste(v1,v2,v_inter,sep = " + "),
+                               sep = " ~ "))
+    phmod_v_linear = coxph(f_linear, data = dat_log)
+    phmod_v_inter = coxph(f_inter, data = dat_log)
+    AIC_linear = c(AIC_linear, AIC(phmod_v_linear))
+    AIC_inter = c(AIC_inter, AIC(phmod_v_inter))
+    Predictor1 = c(Predictor1, v1)
+    Predictor2 = c(Predictor2, v2)
+  }
+}
+
+two_pred_res = data.frame(Predictor1 = Predictor1,
+                          Predictor2 = Predictor2,
+                          AIC_linear = AIC_linear,
+                          AIC_interation = AIC_inter)
+head(two_pred_res)
+## sort by AIC_linear
+two_pred_res %>% arrange(AIC_linear) %>% head()
+
+## sort by AIC_interaction
+two_pred_res %>% arrange(AIC_interation) %>% head()
+
+## SAME AS BEFORE:
+## Best model is
+## Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI + log_peak_vl
