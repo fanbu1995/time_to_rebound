@@ -1,0 +1,71 @@
+---
+title: "B2 rebound survival analysis"
+author: "Fan Bu"
+date: "6/1/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup 2, echo=FALSE}
+library(tidyverse)
+library(survival)
+library(survminer)
+
+setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
+```
+
+## Overview
+(Goal of the analysis, overview of the data)
+(Show a summary table of survival times/censorship)
+(Also: visualization of the KM curve (survival probability curve by time))
+
+```{r load data, echo=FALSE}
+dat_log = readRDS("reboundB2_logTrans.rds")
+```
+
+## Predictors transformations and correlations
+
+### Predictor distributions and potential transformations
+(mention large range of certain variables, log-transform, and martingale residuals)
+(ALSO: created a new measure of "peak viral load": avg. of top 2 viral load measurements pre ART)
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+### Correlations between predictors
+(list the findings)
+
+(also include the RNA-DNA plot; ask why the week 56 counts do not correlate)
+
+
+## Univariate survival analysis 
+
+### Model description: Cox Porportional Hazards model
+
+### Non-parametric check: concordance ("C-statistic")
+
+### Model selection
+(exhaustive search of all univariate models)
+(selection based on log rank test, wald test, likelihood ratio test,
+as well as AIC, BIC)
+
+### The chosen model
+(predictor of choice: "pos_auc_0_weeks_post_ATI")
+(results and visualization)
+
+
+## Bivariate survival analysis
+
+### Model selection method
+"Add-on" + "exhaustive search"; selection by AIC; 
+also included an interaction term, but the simple linear model works better
+
+### The chosen bivariate model
+Visualization of the curves
+
+
+
