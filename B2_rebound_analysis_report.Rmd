@@ -7,24 +7,58 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Documents/Research_and_References/HIV_rebound_summer2020/")
 ```
 
-```{r setup 2, echo=FALSE}
+```{r setup 2, echo=FALSE, message=F, warning=F}
 library(tidyverse)
 library(survival)
 library(survminer)
 
-setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
+#setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
 ```
 
 ## Overview
-(Goal of the analysis, overview of the data)
-(Show a summary table of survival times/censorship)
-(Also: visualization of the KM curve (survival probability curve by time))
+
+The goal of the analysis is to study influential predictors for time to rebound. The data analyzed here are obtained in the B2 group experiments. 
+
+These potential predictors are investigated:
+
+- **Viral load pre ART**: peak viral load & viral load at treatment
+- **Antibody concentration**: GP41 and GP120, peak level and level at treatment
+- **Cell-associated RNA and DNA**: 
+    - SHIV RNA copies per million cell RNA: measured in blood, lymph node and rectal biopsy at 8 and 56 weeks post infection (RB only at 56 weeks)
+    - SHIV DNA copies per million cell DNA: measured in blood, lymph node and rectal biopsy at 8, 16, 36 and 56 weeks post infection (no RB at 8 weeks)
+- **Neutralization**: 
+    - Point IC50 measured at 0, 2, 4, 8 weeks post ATI
+    - POS AUC measured at 0, 2, 4, 8 weeks post ATI
 
 ```{r load data, echo=FALSE}
 dat_log = readRDS("reboundB2_logTrans.rds")
 ```
+
+Among the 10 monkeys in group B2, 9 experienced rebound (except for RQc19, labelled as "0" in the "observed" column). Below is a summary table of their rebound times (measured in days).
+
+```{r rebound times, echo=FALSE}
+knitr::kable(dat_log %>% select(ID = animal_id,
+                                rebound_time = rebound_time_days_post_ati,
+                                observed))
+```
+
+Below is the basic Kaplan Meier curve of the rebound times. This curve shows the probability of surviving past any time point; that is, a point (t, p) on the curve means that a monkey has a $p \times 100\%$ chance of **not** having rebound till $t$ days. 
+
+```{r basic KM curve, echo=FALSE}
+simple_KM = survfit(Surv(rebound_time_days_post_ati, observed)~1, data=dat_log)
+# plot(simple_KM)
+## prettier version
+ggsurvplot(simple_KM, data = dat_log, 
+           censor.shape="|", censor.size = 4,
+           size = 1.5, palette = c("#2E9FDF"),
+           conf.int = TRUE,
+           ggtheme = theme_bw())
+```
+
+
 
 ## Predictors transformations and correlations
 
@@ -33,7 +67,7 @@ dat_log = readRDS("reboundB2_logTrans.rds")
 (ALSO: created a new measure of "peak viral load": avg. of top 2 viral load measurements pre ART)
 
 ```{r pressure, echo=FALSE}
-plot(pressure)
+
 ```
 
 ### Correlations between predictors
