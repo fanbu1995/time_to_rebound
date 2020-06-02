@@ -135,4 +135,23 @@ names(all_res_dat) = c("coef","exp(coef)","concordance",
 all_res_dat$predictor = All_covars
 all_res_dat
 
+## save this result too
+write.csv(all_res_dat,"time_to_rebound/univariate_CoxPH_results_all.csv",
+          row.names = FALSE)
+
+## look at pvalue < .05 ones
+## log_rank_test
+all_res_dat %>% filter(log_rank_test < 0.05)
+## Wald test
+all_res_dat %>% filter(wald_test < 0.05)
+## likelihood ratio test
+## (said to have best behavior with small sample size)
+all_res_dat %>% filter(lik_ratio_test < 0.05) %>% 
+  select(predictor, lik_ratio_test)
+
+### EXACTLY the same as before
+
+
+# 4. Bi-variate (two-predictor) Cox PH model
+
 
