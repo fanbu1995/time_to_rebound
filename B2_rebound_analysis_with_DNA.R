@@ -149,9 +149,122 @@ all_res_dat %>% filter(wald_test < 0.05)
 all_res_dat %>% filter(lik_ratio_test < 0.05) %>% 
   select(predictor, lik_ratio_test)
 
-### EXACTLY the same as before
+### EXACTLY the same as before!
+# predictor lik_ratio_test
+# 1 log_point_ic50_0_weekspost_ATI    0.015338725
+# 2 log_point_ic50_8_weekspost_ATI    0.017391100
+# 3       pos_auc_0_weeks_post_ATI    0.002380561
 
 
 # 4. Bi-variate (two-predictor) Cox PH model
 
+## Since pos_auc_0_weeks_post_ATI is highly correlated with 
+## - all the other AUCs, and
+## - all the pointi_ic50s
+## we don't consider those predictors as the second one
+## (i.e., only consider VLs, Antibodies, RNA copies, DNA copies)
 
+f_auc0 = "Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI"
+
+Vars = names(dat_log)[c(6:16,25:35)]
+AIC_linear = NULL
+AIC_inter = NULL
+for(v in Vars){
+  v_inter = paste0("pos_auc_0_weeks_post_ATI * ",v)
+  f_linear = as.formula(paste(f_auc0,v,sep = " + "))
+  f_inter = as.formula(paste(f_auc0,v,v_inter,sep = " + "))
+  phmod_v_linear = coxph(f_linear, data = dat_log)
+  phmod_v_inter = coxph(f_inter, data = dat_log)
+  AIC_linear = c(AIC_linear, AIC(phmod_v_linear))
+  AIC_inter = c(AIC_inter, AIC(phmod_v_inter))
+}
+
+add_pred_res = data.frame(second_predictor = Vars, 
+                          AIC_linear = AIC_linear,
+                          AIC_interation = AIC_inter)
+
+add_pred_res %>% arrange(AIC_linear) %>% head()
+
+### There is a change: incluing log_peak_vl_2 has an edge!
+# second_predictor AIC_linear AIC_interation
+# 1           log_peak_vl_2   18.01492       19.91185
+# 2             log_peak_vl   19.07615       20.25586
+# 3    log_RNA_copies_RB_56   21.85564       21.55774
+
+## look at this new bivariate model
+phmod_auc0_peakVL2 = coxph(update(as.formula(f_auc0), ~ . + log_peak_vl_2), 
+                          data = dat_log)
+summary(phmod_auc0_peakVL2)
+### Summary:
+### Concordance: 0.932 (same as before with log_peak_vl)
+### pos_auc_0_weeks_post_ATI: negative effect on hazard (delays rebound)
+### log_peak_vl: positive effect on hazard (accelerates rebound)
+### ALTHOUGH none of the effects is significantly non-zero (same as before)
+
+confint(phmod_auc0_peakVL2)
+#                               2.5 %   97.5 %
+# pos_auc_0_weeks_post_ATI -166.849287 12.46821
+# log_peak_vl_2              -1.521619 13.41001
+
+
+## a) baseline survival curve (at the mean values)
+ggsurvplot(survfit(phmod_auc0_peakVL2, data=dat_log), 
+           palette = c("#2E9FDF"),
+           ggtheme = theme_bw())
+# HUGE confidence intervals
+
+## b) survival curves at representative values of each variable
+## i) fix peak VL at mean, vary AUC_0_week
+mean(dat_log$log_peak_vl_2)
+# [1] 5.8631
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+
+auc0_fit = survfit(phmod_auc0_peakVL2, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values,
+                                        log_peak_vl_2 = mean(dat_log$log_peak_vl_2)))
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "POS AUC \n0 weeks\npost ATI",
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           caption = "Fix log_peak_VL_2 at 5.86 (mean)",
+           ggtheme = theme_bw(base_size = 14))
+
+## ii) fix AUC_0_week at mean, vary log peak VL 2
+sort(dat_log$log_peak_vl_2)
+# [1] 4.366423 5.196136 5.597164 5.651816 5.812189 6.008954 6.103290
+# [8] 6.469425 6.483587 6.942020
+mean(dat_log$pos_auc_0_weeks_post_ATI)
+# [1] 0.24949
+peakVL_values = c(4.5,5.2,5.8,6.5) # 5.8 is approximately the mean value
+
+peakVL_fit = survfit(phmod_auc0_peakVL2, 
+                     newdata = data.frame(pos_auc_0_weeks_post_ATI = mean(dat_log$pos_auc_0_weeks_post_ATI),
+                                          log_peak_vl_2 = peakVL_values))
+ggsurvplot(peakVL_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "Peak viral load 2\n(log-scale)",
+           legend.labs=c("4.5", 
+                         "5.2",
+                         "5.8(mean)",
+                         "6.5"),
+           caption = "Fix pos_auc_0_weeks_post_ATI at 0.25 (mean)",
+           ggtheme = theme_bw(base_size = 14))
+
+## c) check proportional hazards assumption
+ggcoxzph(cox.zph(phmod_auc0_peakVL2))
+# global p-value = 0.0576
+# AUC0 p-value = 0.363
+# log peak VL p-value = 0.9432
+# Not very strong evidence to refute proportional hazards assumption
+
+## d) look at influential observations/outliers
+##    (using deviance residuals)
+ggcoxdiagnostics(phmod_auc0_peakVL2, type = "deviance",
+                 linear.predictions = FALSE, 
+                 ggtheme = theme_bw())
+## deviance quite small --> no obvious outliers
