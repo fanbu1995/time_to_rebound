@@ -57,7 +57,7 @@ panel.hist <- function(x, ...)
   rect(breaks[-nB], 0, breaks[-1], y, col = "cyan", ...)
 }
 
-## 3.1: DNA vs RNA in blood
+## 2.1: DNA vs RNA in blood
 pairs(dat_log %>% 
         select(log_RNA_copies_blood_8,log_RNA_copies_blood_56, 
                log_DNA_copies_Blood_8:log_DNA_copies_Blood_56), 
@@ -66,7 +66,7 @@ pairs(dat_log %>%
 ### - RNA and DNA highly correlated on week 8 (also between weeks 8 and 16)
 ### - Not much correlation on week 56????
 
-## 3.2: DNA vs RNA in lymph node
+## 2.2: DNA vs RNA in lymph node
 pairs(dat_log %>% 
         select(log_RNA_copies_LN_8,log_RNA_copies_LN_56, 
                log_DNA_copies_LN_8:log_DNA_copies_LN_56), 
@@ -76,7 +76,7 @@ pairs(dat_log %>%
 ### - DNA copies highly correlated between weeks 8 and 16
 ### - But still, not much correlation for week 56 copies
 
-## 3.3: DNA vs RNA in rectal biopsy
+## 2.3: DNA vs RNA in rectal biopsy
 pairs(dat_log %>% 
         select(log_RNA_copies_RB_56, 
                log_DNA_copies_RB_16:log_DNA_copies_RB_56), 
@@ -84,3 +84,55 @@ pairs(dat_log %>%
 ### Findings:
 ### - Only see high correlation between RNA week 56 and DNA week 36
 ### - all the others are very low correlation
+
+
+# 3. Univariate survival models
+Response = "Surv(rebound_time_days_post_ati, observed)"
+All_covars = names(dat_log)[6:35]
+
+# 3.1 check concordance, the c-statistic
+
+C_stats = NULL
+
+for(v in All_covars){
+  f = as.formula(paste(Response,v,sep = " ~ "))
+  C_v = concordance(f, data=dat_log, timewt = "n")$concordance
+  C_stats = c(C_stats, C_v)
+}
+
+C_stats = data.frame(Predictor = All_covars, Concordance = C_stats)
+
+## show it with descending rank
+C_stats %>% arrange(desc(Concordance))
+
+### Findings:
+### - Pretty much the same as before
+### - the DNA counts don't have high concordance
+### - the new "peak viral load" measure has even lower concordance
+
+# 3.2 Univariate Cox Proportional hazards model
+
+all_res = NULL
+
+for(v in All_covars){
+  f = as.formula(paste(Response,v,sep = " ~ "))
+  phmod = coxph(f, data=dat_log)
+  phmod_summ = summary(phmod)
+  this_v = c(phmod_summ$coefficients[,c("coef","exp(coef)")],
+             phmod_summ$concordance[1],
+             phmod_summ$logtest["pvalue"] %>% as.numeric(),
+             phmod_summ$waldtest["pvalue"] %>% as.numeric(),
+             phmod_summ$sctest["pvalue"] %>% as.numeric(),
+             AIC(phmod), BIC(phmod))
+  all_res = rbind(all_res, this_v)
+}
+
+all_res_dat = as.data.frame(all_res, row.names = All_covars)
+names(all_res_dat) = c("coef","exp(coef)","concordance",
+                       "lik_ratio_test", "wald_test",
+                       "log_rank_test", "AIC", "BIC")
+
+all_res_dat$predictor = All_covars
+all_res_dat
+
+
