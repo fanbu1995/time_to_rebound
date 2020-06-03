@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = "~/Documents/Research_and_References/HIV_rebound_summer2020/")
+knitr::opts_chunk$set(fig.width=8, fig.height=6, fig.align = "center")
 ```
 
 ```{r setup 2, echo=FALSE, message=F, warning=F}
@@ -156,12 +157,15 @@ At the end, the univariate model with `pos_auc_0_weeks_post_ATI` has the smalles
 
 `pos_auc_0_weeks_post_ATI` has a significant negative effect on the hazard function; that is, **a higher AUC at ATI delays rebound**. 
 
-```{r univariate Cox PH model, echo=F}
+```{r univariate Cox PH model, echo=F, fig.height=4}
 ## 1) predictor: pos_auc_0_weeks_post_ATI
 phmod_auc0 = coxph(Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI,
                    data = dat_log)
 
-summary(phmod_auc0)
+# summary(phmod_auc0)
+beta = cbind(coef(phmod_auc0), confint(phmod_auc0))
+attr(beta, "dimnames")[[2]][1] = "estimate"
+beta
 
 ### 1.a: baseline survival curve (at the MEAN value of pos_auc_0_weeks_post_ATI)
 ### (should be the same as the plain KM curve...?)
@@ -211,14 +215,104 @@ The following steps are conducted to validate the model/check model assumptions:
 
 ### Model selection method
 
-One natural of extending the previously chosen univariate model is to find the best "addtional" predictor. Thus, an exhaustive search 
+One natural way of extending the previously chosen univariate model is to find the best "addtional" predictor. Thus, an exhaustive search on the second predictor is carried out; here, we not only include linear terms but also try out a model with **an additional interaction term** of the two predictors. 
 
-"Add-on" + "exhaustive search"; selection by AIC; 
-also included an interaction term, but the simple linear model works better
+As mentioned before, `pos_auc_0_weeks_post_ATI` is highly positively correlated with all the other antiboby neutralization measurements, so all the other "POS AUC" and "point IC50" variables are not included in the candidate set. 
+
+The best model is selected as the model with the smallest AIC.
+
+(An exhaustive search among all possible bivariate models is also done as a safety measure; the resulting best model is the same.)
 
 ### The chosen bivariate model
-Visualization of the curves
 
+The chosen model consists of two predictors:
+
+- `pos_auc_0_weeks_post_ATI`
+- `log_peak_vl_2` (the newly created peak viral load measure, in log-scale)
+- (there is no interaction term)
+
+To summarize:
+- "POS AUC" upon ATI **delays** rebound (negative effect on hazard)
+- peak viral load **accelerates** rebound (positive effect on hazard)
+
+```{r bivariate model, echo=F, fig.height=4}
+f_auc0 = "Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI"
+
+
+## look at this new bivariate model
+phmod_auc0_peakVL2 = coxph(update(as.formula(f_auc0), ~ . + log_peak_vl_2), 
+                          data = dat_log)
+# summary(phmod_auc0_peakVL2)
+
+### Summary:
+### Concordance: 0.932 (same as before with log_peak_vl)
+### pos_auc_0_weeks_post_ATI: negative effect on hazard (delays rebound)
+### log_peak_vl: positive effect on hazard (accelerates rebound)
+### ALTHOUGH none of the effects is significantly non-zero (same as before)
+
+# confint(phmod_auc0_peakVL2)
+#                               2.5 %   97.5 %
+# pos_auc_0_weeks_post_ATI -166.849287 12.46821
+# log_peak_vl_2              -1.521619 13.41001
+
+## add: a prettier summary of estimates and CIs
+beta2 = cbind(coef(phmod_auc0_peakVL2), 
+              confint(phmod_auc0_peakVL2))
+attr(beta2, "dimnames")[[2]][1] = "estimate"
+beta2
+
+
+## a) baseline survival curve (at the mean values)
+# ggsurvplot(survfit(phmod_auc0_peakVL2, data=dat_log), 
+#            palette = c("#2E9FDF"),
+#            ggtheme = theme_bw())
+# HUGE confidence intervals
+
+## b) survival curves at representative values of each variable
+## i) fix peak VL at mean, vary AUC_0_week
+# mean(dat_log$log_peak_vl_2)
+# [1] 5.8631
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+
+auc0_fit = survfit(phmod_auc0_peakVL2, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values,
+                                        log_peak_vl_2 = mean(dat_log$log_peak_vl_2)))
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "POS AUC \n0 weeks\npost ATI",
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           caption = "Fix log_peak_VL_2 at 5.86 (mean)",
+           ggtheme = theme_bw(base_size = 14))
+
+## ii) fix AUC_0_week at mean, vary log peak VL 2
+# sort(dat_log$log_peak_vl_2)
+# [1] 4.366423 5.196136 5.597164 5.651816 5.812189 6.008954 6.103290
+# [8] 6.469425 6.483587 6.942020
+# mean(dat_log$pos_auc_0_weeks_post_ATI)
+# [1] 0.24949
+peakVL_values = c(4.5,5.2,5.8,6.5) # 5.8 is approximately the mean value
+
+peakVL_fit = survfit(phmod_auc0_peakVL2, 
+                     newdata = data.frame(pos_auc_0_weeks_post_ATI = mean(dat_log$pos_auc_0_weeks_post_ATI),
+                                          log_peak_vl_2 = peakVL_values))
+ggsurvplot(peakVL_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "Peak viral load 2\n(log-scale)",
+           legend.labs=c("4.5", 
+                         "5.2",
+                         "5.8(mean)",
+                         "6.5"),
+           caption = "Fix pos_auc_0_weeks_post_ATI at 0.25 (mean)",
+           ggtheme = theme_bw(base_size = 14))
+```
+
+### Model validation
+Same validation procedures as described above are employed to check the bivariate model. Again, there is no strong evidence against the PH assumption, and there doesn't seem to be any outlier. 
 
 ## Discussions
 
