@@ -1,7 +1,7 @@
 ---
 title: "B2 rebound survival analysis"
 author: "Fan Bu"
-date: "6/1/2020"
+date: "6/2/2020"
 output: html_document
 ---
 
@@ -25,13 +25,13 @@ The goal of the analysis is to study influential predictors for time to rebound.
 These potential predictors are investigated:
 
 - **Viral load pre ART**: peak viral load & viral load at treatment
-- **Antibody concentration**: GP41 and GP120, peak level and level at treatment
+- **Antibody response**:
+    - ELISA: GP41 and GP120, peak level and level at treatment
+    - Neutralization: Point IC50 & POS AUC measured at 0, 2, 4, 8 weeks post ATI
 - **Cell-associated RNA and DNA**: 
     - SHIV RNA copies per million cell RNA: measured in blood, lymph node and rectal biopsy at 8 and 56 weeks post infection (RB only at 56 weeks)
     - SHIV DNA copies per million cell DNA: measured in blood, lymph node and rectal biopsy at 8, 16, 36 and 56 weeks post infection (no RB at 8 weeks)
-- **Neutralization**: 
-    - Point IC50 measured at 0, 2, 4, 8 weeks post ATI
-    - POS AUC measured at 0, 2, 4, 8 weeks post ATI
+
 
 ```{r load data, echo=FALSE}
 dat_log = readRDS("reboundB2_logTrans.rds")
@@ -59,21 +59,38 @@ ggsurvplot(simple_KM, data = dat_log,
 ```
 
 
-
 ## Predictors transformations and correlations
 
 ### Predictor distributions and potential transformations
-(mention large range of certain variables, log-transform, and martingale residuals)
-(ALSO: created a new measure of "peak viral load": avg. of top 2 viral load measurements pre ART)
 
-```{r pressure, echo=FALSE}
+We can notice that
+- all of the potential predictors are positive values, and 
+- most of the variables have large ranges and dispersed values
 
-```
+Therefore, the predictors are log-transformed. 
+
+(Moreover, we can check the "martingale residuals" to select proper functional forms for the predictors so that linearity would be satisfied for the Cox Porportional Hazards model. Some level of non-linearity is seen, and log-transformation does make the residuals seem more linear, but the small sample size doesn't allow much certainty on this.)
+
+Further, another representation of the "peak viral load" is created: `peak_vl_2` = average of **top 2** viral load measurements pre ART. This is used in the hope to compensate for possible measurement noise in the "peak" viral load.
+
 
 ### Correlations between predictors
-(list the findings)
 
-(also include the RNA-DNA plot; ask why the week 56 counts do not correlate)
+Pairwise scatterplots are created to study significant correlations between potential predictors. (Basically, predictors that are hightly correlated shouldn't be used together in a model.)
+
+Below are the main findings:
+
+  - GP41 concentration at peak and at treatment almost perfectly correlated
+  - peak viral load highly correlated with GP120 at treatment and at peak
+  - GP120 concentration at peak and at treatment also highly correlated
+  - the point IC50 measurements and POS AUC values are all highly correlated, especially those measurements acquired consecutively as well as point IC50 and AUC in the same week
+  - viral load at treatment highly correlated with "RNA blood 8 weeks", "RNA LN 8 weeks" and "DNA blood 8 weeks"
+  - peak VL highly correlated with "RNA blood 8 weeks"
+  - "RNA blood 8 weeks" and "RNA LN 8 weeks" highly correlated
+  - "DNA blood 8 weeks" and "DNA blood 16 weeks" & "DNA LN 8 weeks" and "DNA LN 36 weeks" highly correlated
+
+
+<!-- (also include the RNA-DNA plot; ask why the week 56 counts do not correlate) -->
 
 
 ## Univariate survival analysis 
@@ -102,4 +119,13 @@ also included an interaction term, but the simple linear model works better
 Visualization of the curves
 
 
+## Discussions
+
+Below are some of my questions:
+1. Do we expect the CA-RNA and CA-DNA counts to be highly correlated? We can only see noticeable positive correlation on week 8 (post infection) measurements, but not at all for the following weeks, especially not on week 56. 
+
+2. Might it be promising to incorporate the **full viral load trajectory** (pre ART) into the model? Using all the measurements as predictors would be unrealistic (small sample size!), so it may be possible to learn some "summary statistics" of the viral load trajectory?
+    a. fit each individual curve with a simple function and use the learned parameters as predictors
+    b. use a latent factor model to learn lower-dimensional representations of the viral load time series, and then use the learned features as predictors
+    c. etc.?
 

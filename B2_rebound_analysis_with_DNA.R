@@ -85,6 +85,11 @@ pairs(dat_log %>%
 ### - Only see high correlation between RNA week 56 and DNA week 36
 ### - all the others are very low correlation
 
+## 2.4: also check viral loads vs. DNA
+pairs(dat_log %>% select(log_peak_vl, log_vl_treat, 
+                         log_DNA_copies_Blood_8:log_DNA_copies_RB_56),
+      lower.panel = panel.cor, diag.panel = panel.hist)
+
 
 # 3. Univariate survival models
 Response = "Surv(rebound_time_days_post_ati, observed)"

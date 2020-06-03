@@ -179,7 +179,7 @@ summary {
 
 <h1 class="title toc-ignore">B2 rebound survival analysis</h1>
 <h4 class="author">Fan Bu</h4>
-<h4 class="date">6/1/2020</h4>
+<h4 class="date">6/2/2020</h4>
 
 </div>
 
@@ -190,16 +190,15 @@ summary {
 <p>These potential predictors are investigated:</p>
 <ul>
 <li><strong>Viral load pre ART</strong>: peak viral load &amp; viral load at treatment</li>
-<li><strong>Antibody concentration</strong>: GP41 and GP120, peak level and level at treatment</li>
+<li><strong>Antibody response</strong>:
+<ul>
+<li>ELISA: GP41 and GP120, peak level and level at treatment</li>
+<li>Neutralization: Point IC50 &amp; POS AUC measured at 0, 2, 4, 8 weeks post ATI</li>
+</ul></li>
 <li><strong>Cell-associated RNA and DNA</strong>:
 <ul>
 <li>SHIV RNA copies per million cell RNA: measured in blood, lymph node and rectal biopsy at 8 and 56 weeks post infection (RB only at 56 weeks)</li>
 <li>SHIV DNA copies per million cell DNA: measured in blood, lymph node and rectal biopsy at 8, 16, 36 and 56 weeks post infection (no RB at 8 weeks)</li>
-</ul></li>
-<li><strong>Neutralization</strong>:
-<ul>
-<li>Point IC50 measured at 0, 2, 4, 8 weeks post ATI</li>
-<li>POS AUC measured at 0, 2, 4, 8 weeks post ATI</li>
 </ul></li>
 </ul>
 <p>Among the 10 monkeys in group B2, 9 experienced rebound (except for RQc19, labelled as “0” in the “observed” column). Below is a summary table of their rebound times (measured in days).</p>
@@ -271,10 +270,25 @@ summary {
 <h2>Predictors transformations and correlations</h2>
 <div id="predictor-distributions-and-potential-transformations" class="section level3">
 <h3>Predictor distributions and potential transformations</h3>
-<p>(mention large range of certain variables, log-transform, and martingale residuals) (ALSO: created a new measure of “peak viral load”: avg. of top 2 viral load measurements pre ART)</p>
+<p>We can notice that - all of the potential predictors are positive values, and - most of the variables have large ranges and dispersed values</p>
+<p>Therefore, the predictors are log-transformed.</p>
+<p>(Moreover, we can check the “martingale residuals” to select proper functional forms for the predictors so that linearity would be satisfied for the Cox Porportional Hazards model. Some level of non-linearity is seen, and log-transformation does make the residuals seem more linear, but the small sample size doesn’t allow much certainty on this.)</p>
+<p>Further, another representation of the “peak viral load” is created: <code>peak_vl_2</code> = average of <strong>top 2</strong> viral load measurements pre ART. This is used in the hope to compensate for possible measurement noise in the “peak” viral load.</p>
 </div>
 <div id="correlations-between-predictors" class="section level3">
 <h3>Correlations between predictors</h3>
+<p>Pairwise scatterplots are created to study significant correlations between potential predictors. (Basically, predictors that are hightly correlated shouldn’t be used together in a model.)</p>
+<p>Below are the main findings:</p>
+<ul>
+<li>GP41 concentration at peak and at treatment almost perfectly correlated</li>
+<li>peak viral load highly correlated with GP120 at treatment and at peak</li>
+<li>GP120 concentration at peak and at treatment also highly correlated</li>
+<li>the point IC50 measurements and POS AUC values are all highly correlated, especially those measurements acquired consecutively as well as point IC50 and AUC in the same week</li>
+<li>viral load at treatment highly correlated with “RNA blood 8 weeks”, “RNA LN 8 weeks” and “DNA blood 8 weeks”</li>
+<li>peak VL highly correlated with “RNA blood 8 weeks”</li>
+<li>“RNA blood 8 weeks” and “RNA LN 8 weeks” highly correlated</li>
+<li>“DNA blood 8 weeks” and “DNA blood 16 weeks” &amp; “DNA LN 8 weeks” and “DNA LN 36 weeks” highly correlated</li>
+</ul>
 <p>(list the findings)</p>
 <p>(also include the RNA-DNA plot; ask why the week 56 counts do not correlate)</p>
 </div>
@@ -306,6 +320,18 @@ summary {
 <h3>The chosen bivariate model</h3>
 <p>Visualization of the curves</p>
 </div>
+</div>
+<div id="discussions" class="section level2">
+<h2>Discussions</h2>
+<p>Below are some of my questions: 1. Do we expect the CA-RNA and CA-DNA counts to be highly correlated? We can only see noticeable positive correlation on week 8 (post infection) measurements, but not at all for the following weeks, especially not on week 56.</p>
+<ol start="2" style="list-style-type: decimal">
+<li>Might it be promising to incorporate the <strong>full viral load trajectory</strong> (pre ART) into the model? Using all the measurements as predictors would be unrealistic (small sample size!), so it may be possible to learn some “summary statistics” of the viral load trajectory?
+<ol style="list-style-type: lower-alpha">
+<li>fit each individual curve with a simple function and use the learned parameters as predictors</li>
+<li>use a latent factor model to learn lower-dimensional representations of the viral load time series, and then use the learned features as predictors</li>
+<li>etc.?</li>
+</ol></li>
+</ol>
 </div>
 
 
