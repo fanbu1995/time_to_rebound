@@ -270,7 +270,11 @@ summary {
 <h2>Predictors transformations and correlations</h2>
 <div id="predictor-distributions-and-potential-transformations" class="section level3">
 <h3>Predictor distributions and potential transformations</h3>
-<p>We can notice that - all of the potential predictors are positive values, and - most of the variables have large ranges and dispersed values</p>
+<p>We can notice that</p>
+<ul>
+<li>all of the potential predictors are positive values, and</li>
+<li>most of the variables have large ranges and dispersed values</li>
+</ul>
 <p>Therefore, the predictors are log-transformed.</p>
 <p>(Moreover, we can check the “martingale residuals” to select proper functional forms for the predictors so that linearity would be satisfied for the Cox Porportional Hazards model. Some level of non-linearity is seen, and log-transformation does make the residuals seem more linear, but the small sample size doesn’t allow much certainty on this.)</p>
 <p>Further, another representation of the “peak viral load” is created: <code>peak_vl_2</code> = average of <strong>top 2</strong> viral load measurements pre ART. This is used in the hope to compensate for possible measurement noise in the “peak” viral load.</p>
@@ -412,6 +416,7 @@ Pr(g(Z_i) &gt; g(Z_j) \mid T_i &gt; T_j),
 <li>use a latent factor model to learn lower-dimensional representations of the viral load time series, and then use the learned features as predictors</li>
 <li>etc.?</li>
 </ol></li>
+<li>Data analysis for other experiment groups?</li>
 </ol>
 </div>
 
