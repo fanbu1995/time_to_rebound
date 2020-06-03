@@ -336,7 +336,7 @@ ggcoxzph(cox.zph(phmod_auc0))
 ### p-value = 0.6772 -> no strong evidence against the PH assumption
 
 ### Notes on this:
-# The function cox.zph() provides a convenient solution to test the proportional hazards assumption for each covariate included in a Cox refression model fit.
+# The function cox.zph() provides a convenient solution to test the proportional hazards assumption for each covariate included in a Cox regression model fit.
 # 
 # For each covariate, the function cox.zph() correlates the corresponding set of scaled Schoenfeld residuals with time, to test for independence between residuals and time. Additionally, it performs a global test for the model as a whole.
 

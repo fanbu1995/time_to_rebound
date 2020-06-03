@@ -289,17 +289,31 @@ summary {
 <li>“RNA blood 8 weeks” and “RNA LN 8 weeks” highly correlated</li>
 <li>“DNA blood 8 weeks” and “DNA blood 16 weeks” &amp; “DNA LN 8 weeks” and “DNA LN 36 weeks” highly correlated</li>
 </ul>
-<p>(list the findings)</p>
-<p>(also include the RNA-DNA plot; ask why the week 56 counts do not correlate)</p>
+<!-- (also include the RNA-DNA plot; ask why the week 56 counts do not correlate) -->
 </div>
 </div>
 <div id="univariate-survival-analysis" class="section level2">
 <h2>Univariate survival analysis</h2>
 <div id="model-description-cox-porportional-hazards-model" class="section level3">
 <h3>Model description: Cox Porportional Hazards model</h3>
+<p>Suppose subject <span class="math inline">\(i\)</span> has covariates <span class="math inline">\(Z_i\)</span>, then the hazard function (<span class="math inline">\(=1-S(t)=1-Pr(\text{survive past time } t)\)</span>) for <span class="math inline">\(i\)</span> is</p>
+<p><span class="math display">\[
+H(t;Z_i) = H_0(t) \exp(\beta^T Z_i),
+\]</span> where <span class="math inline">\(H_0(t)\)</span> is the baseline hazard function. Throughout this analysis, we use centralized (i.e, de-meaned) covariates <span class="math inline">\(Z_i\)</span>.</p>
 </div>
 <div id="non-parametric-check-concordance-c-statistic" class="section level3">
 <h3>Non-parametric check: concordance (“C-statistic”)</h3>
+<p>Simply put, concordance is a metric of agreement between a survival model (or a predictor) and a binary survival outcome; its interpretation is very similar to that of AUC (area under the ROC curve) for binary classification.</p>
+<p>Suppose a model assigns score function <span class="math inline">\(g(Z_i)\)</span> for a subject <span class="math inline">\(i\)</span> with covariates <span class="math inline">\(Z_i\)</span>, then the concordance (also referred to as the “C-Statistic”) is defined as <span class="math display">\[
+Pr(g(Z_i) &gt; g(Z_j) \mid T_i &gt; T_j),
+\]</span> for any two subjects <span class="math inline">\(i\)</span> and <span class="math inline">\(j\)</span> with event time <span class="math inline">\(T_i\)</span> and <span class="math inline">\(T_j\)</span> respectively.</p>
+<p>Of course, if we set <span class="math inline">\(g\)</span> as the identity function, then we can measure the concordance w.r.t. to the predictors themselves. Below we show the top 5 predictors with highest concordance in the dataset.</p>
+<pre><code>##                        Predictor Concordance
+## 1       pos_auc_0_weeks_post_ATI   0.7954545
+## 2 log_point_ic50_0_weekspost_ATI   0.7727273
+## 3 log_point_ic50_8_weekspost_ATI   0.7500000
+## 4                 log_gp41_treat   0.7045455
+## 5 log_point_ic50_2_weekspost_ATI   0.7045455</code></pre>
 </div>
 <div id="model-selection" class="section level3">
 <h3>Model selection</h3>
