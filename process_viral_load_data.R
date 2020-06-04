@@ -1,9 +1,14 @@
 # 05/29/2020
 # extract viral load data
 
+# 06/03/2020
+# per Cliburn's suggestion: 
+# calculate AUC of viral load curve pre-ART
+
 # load libraries and set working directory
 library(tidyverse)
 library(ggplot2)
+library(zoo)
 
 setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
 
@@ -16,6 +21,8 @@ VL = VL %>% mutate(log_viral_load = log(viral_load)) %>%
 
 saveRDS(VL, "B2_viral_load.rds")
 
+## second-time use: read in the saved data
+VL = readRDS("B2_viral_load.rds")
 
 # visualize by animal IDs
 ggplot(data=VL, aes(x=week_infection, y=log_viral_load)) + 
@@ -63,3 +70,30 @@ dat_log$log_peak_vl_2 = peak_VL$peak_vl_2
 
 # and also save this one
 saveRDS(dat_log, "reboundB2_logTrans.rds")
+
+
+# 06/03/2020
+# get AUC of viral load
+
+# a function to calculate AUC first
+get_AUC <- function(vl, times){
+  times = times[-which(is.na(vl))]
+  vl = vl[-which(is.na(vl))]
+  id = order(times)
+  sum(diff(times[id])*zoo::rollmean(vl[id],2))
+}
+
+VL_AUC = VL %>% filter(week_infection < 62) %>%
+  group_by(animal_id) %>%
+  summarise(vl_auc = get_AUC(viral_load, week_infection),
+            log_vl_auc = get_AUC(log_viral_load, week_infection))
+
+# save it too
+saveRDS(VL_AUC, 'viral_load_AUC.rds')
+
+# also combine this with the previous version of data
+dat_log = readRDS("reboundB2_logTrans_withDNA.rds")
+dat_log$log_vl_auc = VL_AUC$log_vl_auc
+
+# save it
+saveRDS(dat_log, "reboundB2_logTrans_withVLAUC.rds")
