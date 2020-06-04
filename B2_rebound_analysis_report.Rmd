@@ -320,10 +320,12 @@ Same validation procedures as described above are employed to check the bivariat
 Below are some of my questions:
 1. Do we expect the CA-RNA and CA-DNA counts to be highly correlated? We can only see noticeable positive correlation on week 8 (post infection) measurements, but not at all for the following weeks, especially not on week 56. 
 
-2. Might it be promising to incorporate the **full viral load trajectory** (pre ART) into the model? Using all the measurements as predictors would be unrealistic (small sample size!), so it may be possible to learn some "summary statistics" of the viral load trajectory?
-    a. fit each individual curve with a simple function and use the learned parameters as predictors
-    b. use a latent factor model to learn lower-dimensional representations of the viral load time series, and then use the learned features as predictors
-    c. etc.?
+2. Should we include cell counts (e.g., CD4 cell counts) as predictors (suggested by literature)? If so, need help on how to extract/use the flow data.
+
+<!-- 2. Might it be promising to incorporate the **full viral load trajectory** (pre ART) into the model? Using all the measurements as predictors would be unrealistic (small sample size!), so it may be possible to learn some "summary statistics" of the viral load trajectory? -->
+<!--     a. fit each individual curve with a simple function and use the learned parameters as predictors -->
+<!--     b. use a latent factor model to learn lower-dimensional representations of the viral load time series, and then use the learned features as predictors -->
+<!--     c. etc.? -->
 
 3. Data analysis for other experiment groups?    
 
