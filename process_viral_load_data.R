@@ -16,7 +16,8 @@ setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
 VL = read_csv("PVL_B2_02172020_CG.csv")
 
 # create log_viral_load and clean up a bit
-VL = VL %>% mutate(log_viral_load = log(viral_load)) %>%
+VL = VL %>% 
+  mutate(log_viral_load = log(viral_load, base = 10)) %>%
   select(-c(13:14))
 
 saveRDS(VL, "B2_viral_load.rds")
@@ -27,22 +28,28 @@ VL = readRDS("B2_viral_load.rds")
 # visualize by animal IDs
 ggplot(data=VL, aes(x=week_infection, y=log_viral_load)) + 
   geom_vline(xintercept = c(8,62), size=1) +
+  geom_hline(yintercept = log(60,base=10), 
+             size = 0.8, linetype = "dashed") +
   geom_line(aes(color=animal_id)) +
   labs(x="Weeks post infection", 
-       y="Log viral load",
+       y="Viral load (log10)",
        color="Animal ID")+
   scale_x_continuous(breaks = c(0,8,25,50,62,75)) +
+  scale_y_continuous(limits=c(0,8)) +
   theme_bw(base_size = 14)
 
 # then visualize only the pre-treatment part
 ggplot(data=VL%>%filter(week_infection <= 62), 
        aes(x=week_infection, y=log_viral_load)) + 
   geom_vline(xintercept = 8, size=1) +
+  geom_hline(yintercept = log(60,base=10), 
+             size = 0.8, linetype = "dashed") +
   geom_line(aes(color=animal_id)) +
   labs(x="Weeks post infection", 
-       y="Log viral load",
+       y="Viral load (log10)",
        color="Animal ID")+
   scale_x_continuous(breaks = c(0,8,25,50)) +
+  scale_y_continuous(limits=c(0,8)) +
   theme_bw(base_size = 14)
 
 # get "peak viral load" PRE treatment
