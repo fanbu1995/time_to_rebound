@@ -2,6 +2,9 @@
 # B2 rebound survival analysis
 # with DNA copies and viral_load_2
 
+# 06/03/2020
+# re-run some of the code with VL AUC included
+
 ## package and directory setup
 library(tidyverse)
 library(survival)
@@ -91,9 +94,17 @@ pairs(dat_log %>% select(log_peak_vl, log_vl_treat,
       lower.panel = panel.cor, diag.panel = panel.hist)
 
 
+# 06/03/2020
+# (load the latest data version)
+dat_log = readRDS("reboundB2_logTrans_withVLAUC.rds")
+
+
 # 3. Univariate survival models
 Response = "Surv(rebound_time_days_post_ati, observed)"
 All_covars = names(dat_log)[6:35]
+
+# (06/03/2020)
+All_covars = names(dat_log)[6:36]
 
 # 3.1 check concordance, the c-statistic
 
@@ -114,6 +125,10 @@ C_stats %>% arrange(desc(Concordance))
 ### - Pretty much the same as before
 ### - the DNA counts don't have high concordance
 ### - the new "peak viral load" measure has even lower concordance
+
+### (06/03/2020)
+### - Still, pretty much same as before
+### - log_vl_auc does better than other VL measures, ranked at #14
 
 # 3.2 Univariate Cox Proportional hazards model
 
@@ -154,7 +169,7 @@ all_res_dat %>% filter(wald_test < 0.05)
 all_res_dat %>% filter(lik_ratio_test < 0.05) %>% 
   select(predictor, lik_ratio_test)
 
-### EXACTLY the same as before!
+### EXACTLY the same as before! (the same on 06/03/2020)
 # predictor lik_ratio_test
 # 1 log_point_ic50_0_weekspost_ATI    0.015338725
 # 2 log_point_ic50_8_weekspost_ATI    0.017391100
@@ -169,9 +184,15 @@ all_res_dat %>% filter(lik_ratio_test < 0.05) %>%
 ## we don't consider those predictors as the second one
 ## (i.e., only consider VLs, Antibodies, RNA copies, DNA copies)
 
+## (update on 06/03/2020: 
+## correlation with log_vl_auc = .457, not very high)
+
 f_auc0 = "Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI"
 
 Vars = names(dat_log)[c(6:16,25:35)]
+
+# 06/03/2020
+Vars = names(dat_log)[c(6:16,25:36)]
 AIC_linear = NULL
 AIC_inter = NULL
 for(v in Vars){
@@ -195,6 +216,13 @@ add_pred_res %>% arrange(AIC_linear) %>% head()
 # 1           log_peak_vl_2   18.01492       19.91185
 # 2             log_peak_vl   19.07615       20.25586
 # 3    log_RNA_copies_RB_56   21.85564       21.55774
+
+### 06/03/2020: log_peak_vl_2 still the best, 
+### but log_vl_auc not bad either
+# second_predictor AIC_linear AIC_interation
+# 1           log_peak_vl_2   18.01492       19.91185
+# 2             log_peak_vl   19.07615       20.25586
+# 3              log_vl_auc   21.34036       23.25653
 
 ## look at this new bivariate model
 phmod_auc0_peakVL2 = coxph(update(as.formula(f_auc0), ~ . + log_peak_vl_2), 
