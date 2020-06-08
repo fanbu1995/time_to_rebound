@@ -179,7 +179,7 @@ summary {
 
 <h1 class="title toc-ignore">B2 rebound survival analysis</h1>
 <h4 class="author">Fan Bu</h4>
-<h4 class="date">6/2/2020</h4>
+<h4 class="date">6/9/2020</h4>
 
 </div>
 
@@ -189,7 +189,7 @@ summary {
 <p>The goal of the analysis is to study influential predictors for time to rebound. The data analyzed here are obtained in the B2 group experiments.</p>
 <p>These potential predictors are investigated:</p>
 <ul>
-<li><strong>Viral load pre ART</strong>: peak viral load &amp; viral load at treatment</li>
+<li><strong>Viral load pre ART</strong>: peak viral load, viral load at treatment &amp; <strong>area-under-VL-curve</strong></li>
 <li><strong>Antibody response</strong>:
 <ul>
 <li>ELISA: GP41 and GP120, peak level and level at treatment</li>
@@ -277,7 +277,9 @@ summary {
 </ul>
 <p>Therefore, the predictors are log-transformed.</p>
 <p>(Moreover, we can check the “martingale residuals” to select proper functional forms for the predictors so that linearity would be satisfied for the Cox Porportional Hazards model. Some level of non-linearity is seen, and log-transformation does make the residuals seem more linear, but the small sample size doesn’t allow much certainty on this.)</p>
-<p>Further, another representation of the “peak viral load” is created: <code>peak_vl_2</code> = average of <strong>top 2</strong> viral load measurements pre ART. This is used in the hope to compensate for possible measurement noise in the “peak” viral load.</p>
+<p>Further, another representation of the “peak viral load” is created:</p>
+<p><code>peak_vl_2</code> = average of <strong>top 2</strong> viral load measurements pre ART.</p>
+<p>This is used in the hope to compensate for possible measurement noise in the “peak” viral load.</p>
 </div>
 <div id="correlations-between-predictors" class="section level3">
 <h3>Correlations between predictors</h3>
@@ -408,14 +410,21 @@ Pr(g(Z_i) &gt; g(Z_j) \mid T_i &gt; T_j),
 </div>
 <div id="discussions" class="section level2">
 <h2>Discussions</h2>
-<p>Below are some of my questions: 1. Do we expect the CA-RNA and CA-DNA counts to be highly correlated? We can only see noticeable positive correlation on week 8 (post infection) measurements, but not at all for the following weeks, especially not on week 56.</p>
+<p>I tried to adjust for multiple testing when selecting a univariate model. Take the Likelihood Ratio Test on single predictors for example, I adopted the “Simes method (1986)”, which is said to have higher power than the Bonferroni adjustment and is capable to deal with p-values that are positively correlated.</p>
+<p>The Sime method works like this: suppose there are <span class="math inline">\(S\)</span> hypotheses <span class="math inline">\(H_i\)</span> (<span class="math inline">\(i=1,2,\ldots,S\)</span>) to test, and their <strong>ordered</strong> p-values are <span class="math inline">\(p_{(1)}, p_{(2)}, \ldots, p_{(S)}\)</span>; then reject the joint null <span class="math inline">\(H = \cap H_i\)</span> at level <span class="math inline">\(\alpha\)</span> if at least one p-value satisfies</p>
+<p><span class="math display">\[
+p_{(i)} &lt; i\alpha/S.
+\]</span></p>
+<p>Unfortunately, using this method to test the null that “none of the single predictors in the univariate Cox PH models above is significant”, the null <strong>can’t</strong> be rejected. So, is there really a multiple testing issue with selecting a univariate model? And if so, what should we do when the result is not what we would expect?</p>
+<p>Below are some of my other questions: 1. Do we expect the CA-RNA and CA-DNA counts to be highly correlated? We can only see noticeable positive correlation on week 8 (post infection) measurements, but not at all for the following weeks, especially not on week 56.</p>
 <ol start="2" style="list-style-type: decimal">
-<li>Might it be promising to incorporate the <strong>full viral load trajectory</strong> (pre ART) into the model? Using all the measurements as predictors would be unrealistic (small sample size!), so it may be possible to learn some “summary statistics” of the viral load trajectory?
-<ol style="list-style-type: lower-alpha">
-<li>fit each individual curve with a simple function and use the learned parameters as predictors</li>
-<li>use a latent factor model to learn lower-dimensional representations of the viral load time series, and then use the learned features as predictors</li>
-<li>etc.?</li>
-</ol></li>
+<li>Should we include cell counts (e.g., CD4 cell counts) as predictors (suggested by literature)? If so, need help on how to extract/use the flow data.</li>
+</ol>
+<!-- 2. Might it be promising to incorporate the **full viral load trajectory** (pre ART) into the model? Using all the measurements as predictors would be unrealistic (small sample size!), so it may be possible to learn some "summary statistics" of the viral load trajectory? -->
+<!--     a. fit each individual curve with a simple function and use the learned parameters as predictors -->
+<!--     b. use a latent factor model to learn lower-dimensional representations of the viral load time series, and then use the learned features as predictors -->
+<!--     c. etc.? -->
+<ol start="3" style="list-style-type: decimal">
 <li>Data analysis for other experiment groups?</li>
 </ol>
 </div>
