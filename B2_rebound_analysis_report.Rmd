@@ -345,6 +345,6 @@ Below are some of my other questions:
 <!--     b. use a latent factor model to learn lower-dimensional representations of the viral load time series, and then use the learned features as predictors -->
 <!--     c. etc.? -->
 
-3. Data analysis for other experiment groups?    
+3. Data analysis for other experiment groups? (I've looked at the data tracking document and all the data folders; right now only B1 and B2 data are kind of complete.)
 
 
