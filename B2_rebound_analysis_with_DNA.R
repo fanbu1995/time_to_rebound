@@ -176,6 +176,21 @@ all_res_dat %>% filter(lik_ratio_test < 0.05) %>%
 # 3       pos_auc_0_weeks_post_ATI    0.002380561
 
 
+## 06/08/2020
+## Adjust for multiple testing (using Sime's inequality)
+## Test if any p_(i) < i*0.05/n
+
+nvar = length(All_covars)
+Is = seq_along(All_covars)
+
+lrt_pvals = all_res_dat$lik_ratio_test
+Thres = 0.05/nvar * Is
+
+sort(lrt_pvals) < Thres
+
+### All of them are FALSE! So at least using this method, can't reject the null...
+
+
 # 4. Bi-variate (two-predictor) Cox PH model
 
 ## Since pos_auc_0_weeks_post_ATI is highly correlated with 
