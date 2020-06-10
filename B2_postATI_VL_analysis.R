@@ -131,7 +131,7 @@ All_covars[order(corrs_AUC, decreasing = T)]
 ### Important factors: 1) pre-ART viral load, 2) CA-DNA&RNA
 
 # 3) visualize a bit
-## post peak vs pre peak
+## post peak vs VL at treatment
 ggscatter(data = dat_log_rebound, 
           y = "log_peakVL_postATI", x = "log_vl_treat",
           add = "reg.line",

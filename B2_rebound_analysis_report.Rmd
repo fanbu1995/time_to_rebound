@@ -321,6 +321,108 @@ ggsurvplot(peakVL_fit, conf.int = FALSE,
 ### Model validation
 Same validation procedures as described above are employed to check the bivariate model. Again, there is no strong evidence against the PH assumption, and there doesn't seem to be any outlier. 
 
+## Supplementary analysis: post ATI viral load level
+
+Analysis is also conducted on the post ATI viral load levels to identify predictive factors. (Only analyzed data on the 9 animals with rebound.)
+
+Two measures of "post ATI viral load level" are used (both in log10 scale):
+
+- Peak viral load after rebound, and 
+- Ared-under-VL-curve after ATI
+
+```{r load more packages, echo=FALSE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(zoo)
+```
+
+
+```{r post ATI viral load, echo=FALSE, warning=FALSE, message=FALSE}
+VL = readRDS("B2_viral_load.rds")
+
+# # visualize by animal IDs
+# ggplot(data=VL, aes(x=week_infection, y=log_viral_load)) + 
+#   geom_vline(xintercept = c(8,62), size=1) +
+#   geom_line(aes(color=animal_id)) +
+#   labs(x="Weeks post infection", 
+#        y="Log viral load",
+#        color="Animal ID")+
+#   scale_x_continuous(breaks = c(0,8,25,50,62,75)) +
+#   theme_bw(base_size = 14)
+
+# visualize only the part after ATI
+VL_post = VL %>% filter(days_post_ati >= 0)
+
+# load rebound time data as well (mark up rebound time in plots)
+dat_log = readRDS("reboundB2_logTrans_withVLAUC.rds")
+rebound_times = dat_log %>% 
+  select(animal_id, rebound_time_days_post_ati)
+rebound_times$rebound_time_days_post_ati[rebound_times$animal_id=="RQc19"] = NA
+
+ggplot(data=VL_post, aes(x=days_post_ati, y=log_viral_load)) +
+  geom_hline(yintercept = log(60, base=10), 
+             size = 0.5, linetype = "dashed") +
+  geom_vline(aes(xintercept = rebound_time_days_post_ati),
+             data = rebound_times, 
+             size = 0.5, linetype = "dashed") +
+  geom_line(aes(color=animal_id)) +
+  geom_point(aes(color=animal_id), size=1) +
+  labs(x="Days post ATI", 
+       y="Viral load (log10)",
+       color="Animal ID")+
+  #scale_x_continuous(breaks = c(0,8,25,50,62,75)) +
+  scale_y_continuous(limits = c(0,8)) +
+  theme_bw(base_size = 14)+
+  facet_wrap(~animal_id, ncol = 5)
+
+```
+
+The two measures are, of course, positively correlated.
+
+```{r peak vs AUC post ATI, echo=FALSE}
+dat_log_rebound = readRDS("rebound_B2_with_postATI_VL.rds")
+ggscatter(data = dat_log_rebound, 
+          x = "log_peakVL_postATI", y = "log_VL_AUC_postATI",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+```
+
+Pearson correlation coefficients are calculated between each of the viral load measures and each of the potential predictors. Predictors with very high positive correlation include:
+
+- viral load at treatment
+- cell-associated DNA/RNA level at treatment
+- cell-associated DNA/RNA level during treatment
+
+```{r peak vs VL at treat, echo = 8}
+ggscatter(data = dat_log_rebound, 
+          y = "log_peakVL_postATI", x = "log_vl_treat",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+```
+The "outlier": animal `RJm19`, with a relatively low post-ATI peak viral (but relatively high pre-ART viral load). 
+
+
+```{r AUC vs RNA LN 8, echo = 8}
+ggscatter(data = dat_log_rebound, 
+          y = "log_VL_AUC_postATI", x = "log_RNA_copies_LN_8",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+```
+The "outlier": animal `RLg19`, with overly high post-AIT viral load AUC. 
+
+
+### (TO-DO)
+
+Some papers have suggested that CD4 cell counts are associated with post-rebound viral load level, and I plan to look at the flow cytometry next. 
+
+
 ## Discussions
 
 I tried to adjust for multiple testing when selecting a univariate model. Take the Likelihood Ratio Test on single predictors for example, I adopted the "Simes method (1986)", which is said to have higher power than the Bonferroni adjustment and is capable to deal with p-values that are positively correlated.
