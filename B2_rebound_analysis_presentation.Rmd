@@ -1,0 +1,218 @@
+---
+title: "B2 Rebound Analysis"
+author: "Fan Bu"
+date: "6/11/2020"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_knit$set(root.dir = "~/Documents/Research_and_References/HIV_rebound_summer2020/")
+knitr::opts_chunk$set(fig.width=8, fig.height=6, fig.align = "center")
+```
+
+```{r setup 2, echo=FALSE, message=F, warning=F}
+library(tidyverse)
+library(survival)
+library(survminer)
+
+#setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
+```
+
+## Overview
+
+- Goal of analysis: identify predictors for **viral rebound** (typically happens after treatment interruption)
+- Data: B2 group (8 monkeys, late ART at 8 weeks upon infection)
+- Results: 
+
+    - Correlates of time-to-rebound: Antibody neutralization capability & Viral load pre-ART
+    - Correlates of post-rebound viral load: Viral load pre-ART & Cell-associated RNA and DNA levels
+  
+- Methods:
+  
+    - Cox Porportional Hazards model (a survival)
+    - Pearson correlation coefficients (& linear regression)
+
+
+## Time to rebound data
+
+Time to rebound measured in **days**; one of the animals **didn't** rebound ("censorsed").
+
+```{r load data, echo=FALSE}
+dat_log = readRDS("reboundB2_logTrans_withVLAUC.rds")
+```
+
+```{r rebound times, echo=FALSE}
+knitr::kable(dat_log %>% select(ID = animal_id,
+                                rebound_time = rebound_time_days_post_ati,
+                                observed))
+```
+
+## Precitor candidates
+
+These potential predictors are investigated:
+
+- **Viral load pre ART**: peak viral load, viral load at treatment & **area-under-VL-curve**
+- **Antibody response**:
+    - ELISA: GP41 and GP120, peak level and level at treatment
+    - Neutralization: Point IC50 & Pos AUC measured at 0, 2, 4, 8 weeks post ATI
+- **Cell-associated RNA and DNA**: 
+    - SHIV RNA copies per million cell RNA: measured in blood, lymph node and rectal biopsy at 8 and 56 weeks post infection (RB only at 56 weeks)
+    - SHIV DNA copies per million cell DNA: measured in blood, lymph node and rectal biopsy at 8, 16, 36 and 56 weeks post infection (no RB at 8 weeks)
+
+
+## Survival function and Cox Proportional Hazards (PH) model
+Survival function:
+$$
+S(t) = \text{Pr}(\text{survive past time t)}
+$$
+
+Model the Hazard function ($H(t) = 1- S(t)$) as: 
+$$
+H(t;Z_i) = H_0(t) \exp(\beta^T Z_i),
+$$
+where $Z_i$ is covariates (predictors) for animal $i$.
+
+Below is the survival curve for this data set.
+
+```{r basic KM curve, echo=FALSE}
+simple_KM = survfit(Surv(rebound_time_days_post_ati, observed)~1, data=dat_log)
+# plot(simple_KM)
+## prettier version
+ggsurvplot(simple_KM, data = dat_log, 
+           censor.shape="|", censor.size = 4,
+           size = 1.5, palette = c("#2E9FDF"),
+           conf.int = TRUE,
+           ggtheme = theme_bw())
+```
+
+
+## Model selection: single predictor
+
+The "best" univariate Cox PH model is selected via comparing
+
+- "concordance": how the predictor agrees with time-to-rebound
+- p-values of significance tests (mainly Likelihood Ratio Test)
+- "AIC" & "BIC": model goodness-of-fit criteria
+
+Best predictor: 
+
+- **Area-under-curve (positive part) for antibody neutralization**
+- The higher `Pos AUC` is, the lower the hazard is
+- Higher antibody neutralization ability **delays** rebound
+
+```{r univariate Cox PH model, echo=F, fig.height=4}
+## 1) predictor: pos_auc_0_weeks_post_ATI
+phmod_auc0 = coxph(Surv(rebound_time_days_post_ati, observed) ~ pos_auc_0_weeks_post_ATI,
+                   data = dat_log)
+
+# summary(phmod_auc0)
+# beta = cbind(coef(phmod_auc0), confint(phmod_auc0))
+# attr(beta, "dimnames")[[2]][1] = "estimate"
+# beta
+
+### 1.a: baseline survival curve (at the MEAN value of pos_auc_0_weeks_post_ATI)
+### (should be the same as the plain KM curve...?)
+# ggsurvplot(survfit(phmod_auc0, data=dat_log), palette = c("#2E9FDF"),
+#            ggtheme = theme_bw())
+
+### 1.b: survival curves at certain representative values of pos_auc_0_weeks_post_ATI
+# sort(dat_log$pos_auc_0_weeks_post_ATI)
+# [1] 0.1097 0.1474 0.1511 0.2184 0.2512 0.2660 0.2887 0.2959 0.3293 0.4372
+# mean(dat_log$pos_auc_0_weeks_post_ATI)
+# [1] 0.24949
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+#auc0_values = quantile(dat_log$pos_auc_0_weeks_post_ATI, c(0.25,0.5,0.75))
+
+auc0_fit = survfit(phmod_auc0, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values))
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "POS AUC \n0 weeks\npost ATI",
+           # legend.labs=c("AUC_0_weeks=0.15", 
+           #               "AUC_0_weeks=0.25(mean)",
+           #               "AUC_0_weeks=0.30",
+           #               "AUC_0_weeks=0.40"),
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           ggtheme = theme_bw(base_size = 14))
+# the confidence bands are HUGE though...
+
+```
+
+## Model selection: two predictors
+
+The "best" bivariate model is selected in similar ways.
+
+Best predictors:
+
+- **Area-under-curve (positive part) for antibody neutralization**
+- **Peak viral load** pre ART (averaged between two maximum measurements)
+- A higher `Pos AUC` **delays** rebound
+- A higher `peak viral load` **accelerates** rebound
+
+## Analysis of post treatment interruption viral load levels
+
+Two measures of "post ATI viral load level" are used (both in log10 scale):
+
+- Peak viral load after rebound, and 
+- Ared-under-VL-curve after ATI
+
+```{r post ATI viral load, echo=FALSE, warning=FALSE, message=FALSE}
+VL = readRDS("B2_viral_load.rds")
+
+# # visualize by animal IDs
+# ggplot(data=VL, aes(x=week_infection, y=log_viral_load)) + 
+#   geom_vline(xintercept = c(8,62), size=1) +
+#   geom_line(aes(color=animal_id)) +
+#   labs(x="Weeks post infection", 
+#        y="Log viral load",
+#        color="Animal ID")+
+#   scale_x_continuous(breaks = c(0,8,25,50,62,75)) +
+#   theme_bw(base_size = 14)
+
+# visualize only the part after ATI
+VL_post = VL %>% filter(days_post_ati >= 0)
+
+# load rebound time data as well (mark up rebound time in plots)
+dat_log = readRDS("reboundB2_logTrans_withVLAUC.rds")
+rebound_times = dat_log %>% 
+  select(animal_id, rebound_time_days_post_ati)
+rebound_times$rebound_time_days_post_ati[rebound_times$animal_id=="RQc19"] = NA
+
+ggplot(data=VL_post, aes(x=days_post_ati, y=log_viral_load)) +
+  geom_hline(yintercept = log(60, base=10), 
+             size = 0.5, linetype = "dashed") +
+  geom_vline(aes(xintercept = rebound_time_days_post_ati),
+             data = rebound_times, 
+             size = 0.5, linetype = "dashed") +
+  geom_line(aes(color=animal_id)) +
+  geom_point(aes(color=animal_id), size=1) +
+  labs(x="Days post ATI", 
+       y="Viral load (log10)",
+       color="Animal ID")+
+  #scale_x_continuous(breaks = c(0,8,25,50,62,75)) +
+  scale_y_continuous(limits = c(0,8)) +
+  theme_bw(base_size = 14)+
+  facet_wrap(~animal_id, ncol = 5)
+
+```
+
+Pearson correlation coefficients are calculated between each of the viral load measures and each of the potential predictors. Predictors with very high positive correlation include:
+
+- viral load at treatment
+- cell-associated DNA & RNA level at treatment
+- cell-associated DNA & RNA level during treatment
+
+
+## Next steps
+
+- Analysis with more potential predictors included
+    * Animal MHC class (A01 positive or negative)
+    * Cell counts (claimed to be associated with time-to-rebound and post-rebound viral level by some papers)
+- Adjust for multiple testing (control false discovery rate)
+- Conduct multivariate Cox Regression with sparsity regularization (small $n$, large $p$)
+
