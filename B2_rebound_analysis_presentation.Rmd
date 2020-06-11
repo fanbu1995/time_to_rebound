@@ -1,7 +1,7 @@
 ---
 title: "B2 Rebound Analysis"
 author: "Fan Bu"
-date: "6/11/2020"
+date: "6/12/2020"
 output: slidy_presentation
 ---
 
@@ -22,7 +22,7 @@ library(survminer)
 ## Overview
 
 - Goal of analysis: identify predictors for **viral rebound** (typically happens after treatment interruption)
-- Data: B2 group (8 monkeys, late ART at 8 weeks upon infection)
+- Data: B2 group (10 monkeys, late ART at 8 weeks upon infection)
 - Results: 
 
     - Correlates of time-to-rebound: Antibody neutralization capability & Viral load pre-ART
@@ -30,7 +30,7 @@ library(survminer)
   
 - Methods:
   
-    - Cox Porportional Hazards model (a survival)
+    - Cox Porportional Hazards model (a survival model)
     - Pearson correlation coefficients (& linear regression)
 
 
@@ -71,7 +71,7 @@ Model the Hazard function ($H(t) = 1- S(t)$) as:
 $$
 H(t;Z_i) = H_0(t) \exp(\beta^T Z_i),
 $$
-where $Z_i$ is covariates (predictors) for animal $i$.
+where $Z_i$ are covariates (predictors) for animal $i$.
 
 Below is the survival curve for this data set.
 
