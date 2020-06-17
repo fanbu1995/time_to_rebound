@@ -1,0 +1,148 @@
+---
+title: 'B2 Rebound Analysis: More'
+author: "Fan Bu"
+date: "6/17/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Documents/Research_and_References/HIV_rebound_summer2020/")
+knitr::opts_chunk$set(fig.width=8, fig.height=6, fig.align = "center")
+```
+
+```{r load packages, echo=FALSE, message=F, warning=F}
+library(tidyverse)
+library(survival)
+library(survminer)
+library(glmnet)
+```
+
+```{r load data, echo=FALSE}
+dat_log = readRDS("reboundB2_logTrans_CellCounts_A01.rds")
+```
+
+
+## Checking out more predictors for time-to-rebound
+
+### 1. Animal MHC class ("A01" positive/negative)
+
+Below is the Kaplan-Meier curve stratified by "A01" classification. There isn't any visible difference between the two survival curves.
+
+```{r KM curve A01, echo=FALSE}
+# 1.1 KM curve stratified by A01 classification
+A01_KM = survfit(Surv(rebound_time_days_post_ati, observed)~A01, data=dat_log)
+## prettier versions
+ggsurvplot(A01_KM, data = dat_log, 
+           censor.shape="|", censor.size = 4,
+           size = 1.5, palette = c("#E7B800", "#2E9FDF"),
+           conf.int = FALSE,
+           ggtheme = theme_bw())
+```
+
+To further validate, a univariate Cox Proporational Hazards model is fit using "A01" as the predictor, and there isn't a significant effect. 
+
+```{r Cox PH with A01}
+phmod_A01 = coxph(Surv(rebound_time_days_post_ati, observed)~A01, 
+                   data = dat_log)
+summary(phmod_A01)
+```
+
+### 2. Cell counts
+
+Absolute CD4 and CD8 cell counts (estimated by flow data + CBC, provided by Veronica) are obtained at Weeks 0, 4, 8. Here I'm using the log-transformed counts as potential predictors. 
+
+As it turns out, none of the cell counts has high concordance with rebound times, compared to other predictors tried out before.
+
+
+## Regularized Cox PH model (Cox regression)
+
+To conduct "automatic" multiple regression and variable selection, I used Cox PH model combined with elastic net ("coxnet", implemented in package `glmnet`); specifically, for the purpose of variable selection, I used Lasso (L1 regularization, i.e., $\alpha=1$ for elastic net).
+
+I did the following things:
+
+1. Fit "coxnet" models with a series of $\lambda$ (regularization hyper-parameter) values, where the covaraites include:
+
+    - **Viral load pre ART**: peak viral load, viral load at treatment & **area-under-VL-curve**
+    - **Antibody response**:
+        - ELISA: GP41 and GP120, peak level and level at treatment
+        - Neutralization: Point IC50 & POS AUC measured at 0, 2, 4, 8 weeks post ATI
+    - **Cell-associated RNA and DNA**: 
+        - SHIV RNA copies per million cell RNA: measured in blood, lymph node and rectal biopsy at 8 and 56 weeks post infection (RB only at 56 weeks)
+        - SHIV DNA copies per million cell DNA: measured in blood, lymph node and rectal biopsy at 8, 16, 36 and 56 weeks post infection (no RB at 8 weeks)
+    - **Cell counts**: Absolute CD4 and CD8 cell counts at 0, 4, 8 weeks.
+    - ("A01" not included)
+    
+2. Select the $\lambda$ that yields the smallest partial deviance in cross validation and obtain the corresponding model.
+
+3. Produce a "predictor inclusion ranking" table of the predictors based on the "coxnet" modeling results. (Note that CV with 10 data points isn't very reliable; the best thing we can get is probably some "variable importance" ranking.)
+
+
+Below are the CV plot (partial likelihood deviance vs. $\log(\lambda)$) and the selected predictors and coefficients (different runs can produce different outcomes, so it's unstable).
+
+```{r Coxnet, echo=FALSE}
+# 3.1 get the design matrix 
+# (ignore A01 for now - can only deal with numeric values)
+X = dat_log[,6:42] %>% as.matrix()
+
+# 3.2 fit Lasso (alpha=1)
+phmod_lasso = glmnet(X, 
+                     Surv(dat_log$rebound_time_days_post_ati, dat_log$observed),
+                     family = "cox")
+
+# (cross validation)
+## (using partial likelihood, 5-fold)
+cv_phmod_lasso1 = cv.glmnet(X, 
+                           Surv(dat_log$rebound_time_days_post_ati, dat_log$observed),
+                           family = "cox", nfolds = 5)
+plot(cv_phmod_lasso1)
+
+coefficients <- coef(phmod_lasso, s = cv_phmod_lasso1$lambda.min)
+active_index <- which(coefficients != 0)
+active_coefficients <-coefficients[active_index]
+active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+
+### put together a table for this result
+cv_res = data.frame(Predictor = active_predictors, 
+                    Coefficient = active_coefficients)
+
+knitr::kable(cv_res, digits = 4)
+```
+
+Below is the obtained "predictor inclusion ranking" table for the top 9 predictors. 
+
+```{r variable inclusion ranking, echo=F}
+# 3.3 Use Lasso results to obtain a "predictor inclusion ranking"
+pred_in = NULL
+coef_sign = NULL
+
+for(l in cv_phmod_lasso1$lambda){
+  coefficients = coef(phmod_lasso, s = l)
+  active_index = which(coefficients != 0)
+  active_coefficients = coefficients[active_index]
+  active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+  
+  if(any(!active_predictors %in% pred_in)){
+    new_index = which(!active_predictors %in% pred_in)
+    pred_in = c(pred_in, active_predictors[new_index])
+    new_coef_sign = ifelse(active_coefficients[new_index] > 0, 
+                           "+", "-")
+    coef_sign = c(coef_sign, new_coef_sign)
+  }
+}
+
+## get a vector of "effect on rebound"
+## (+: accelerate; -: delay)
+rebound_effect = sapply(coef_sign, 
+                        function(x) ifelse(x=="+","accelerate","delay")) %>%
+  as.vector()
+
+## put together a summary table of this thing
+predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
+                                 Predictor = pred_in,
+                                 Coefficient = coef_sign,
+                                 Rebound_Effect = rebound_effect)
+knitr::kable(predictor_inclusion, digits = 4)
+```
+
+
