@@ -146,3 +146,92 @@ knitr::kable(predictor_inclusion, digits = 4)
 ```
 
 
+## Analysis of post-ATI viral load
+I also re-explored the post-ATI viral loads, with animal `RQc19` (the one without rebound) included, as well as cell counts data. 
+
+The results did differ from last time. 
+
+```{r load postATI data, echo=F}
+dat_log_rebound = readRDS("rebound_B2_with_postATI_VL.rds")
+```
+
+
+Variables that correlate with `log peak VL` include:
+
+- `log_DNA_copies_RB_36`
+- `pos_auc_0_weeks_post_ATI`
+- `log_point_ic50_0_weekspost_ATI`
+
+```{r post-ATI peak VL correlations, echo=F}
+## post peak vs RB DNA copies
+ggscatter(data = dat_log_rebound, 
+          y = "log_peakVL_postATI", x = "log_DNA_copies_RB_36",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+
+## post peak vs "pos_auc_0_weeks_post_ATI"
+ggscatter(data = dat_log_rebound, 
+          y = "log_peakVL_postATI", x = "pos_auc_0_weeks_post_ATI",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+
+## post peak vs "pos_auc_0_weeks_post_ATI"
+ggscatter(data = dat_log_rebound, 
+          y = "log_peakVL_postATI", x = "log_point_ic50_0_weekspost_ATI",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+```
+
+Variables that correlate with `VL AUC` include:
+
+- `log_DNA_copies_Blood_36`      
+- `log_DNA_copies_RB_36`        
+- `log_RNA_copies_LN_8`
+- etc. (followed by some other DNA & RNA measurements, and VL at treatment)
+
+```{r post-ATI VL AUC correlations, echo= FALSE}
+## post VL AUC vs log_DNA_copies_Blood_36
+ggscatter(data = dat_log_rebound, 
+          y = "log_VL_AUC_postATI", x = "log_DNA_copies_Blood_36",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+
+## post VL AUC vs log_DNA_copies_RB_36
+ggscatter(data = dat_log_rebound, 
+          y = "log_VL_AUC_postATI", x = "log_DNA_copies_RB_36",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+```
+
+
+I also compared subgroups of positive `A01` vs. negative `A01` (5 monkeys each). 
+
+For "Area-under-VL-curve", it looks like some pattern is there...
+```{r VL AUC boxplot, echo=F}
+## log VL AUC
+ggplot(data=dat_log_rebound, 
+       aes(x=A01, y=log_VL_AUC_postATI)) +
+  geom_boxplot() + 
+  theme_bw()
+```
+
+But is there??
+```{r VL AUC scatterplot, echo=F}
+## (as points...)
+ggplot(data=dat_log_rebound, 
+       aes(x=A01, y=log_VL_AUC_postATI)) +
+  geom_point() + 
+  theme_bw()
+```
+
+A Wilcoxon rank sum test (equivalent to the Mann-Whitney test in this case) is performed (despite the tiny sample size). There is no strong evidence to reject the null hypothesis (p-value = 0.155).

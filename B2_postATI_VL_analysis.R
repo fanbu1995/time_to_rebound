@@ -7,6 +7,11 @@
 # - peak viral load
 # - ared-under-VL-curve
 
+# 06/17/2020
+# re-do the post ATI viral load analysis
+# 1. include RQc19 - also a data point although no rebound
+# 2. include cell counts data and A01 class
+
 
 # load required packages and set working directory
 library(tidyverse)
@@ -35,6 +40,9 @@ VL_post = VL %>% filter(days_post_ati >= 0)
 
 # load rebound time data as well (mark up rebound time in plots)
 dat_log = readRDS("reboundB2_logTrans_withVLAUC.rds")
+
+# 06/17: load latest data file
+dat_log = readRDS("reboundB2_logTrans_CellCounts_A01.rds")
 rebound_times = dat_log %>% 
   select(animal_id, rebound_time_days_post_ati)
 rebound_times$rebound_time_days_post_ati[rebound_times$animal_id=="RQc19"] = NA
@@ -68,6 +76,9 @@ get_AUC <- function(vl, times){
 VL_post_rebound = VL_post %>% 
   filter(animal_id != "RQc19")
 
+# 06/17: include RQc19 data as well
+VL_post_rebound = VL_post
+
 ## impute values below cutoff as **half** of the viral load
 VL_post_rebound$viral_load[which(VL_post_rebound$viral_load <= 60)] = 30
 VL_post_rebound$log_viral_load[which(VL_post_rebound$viral_load <= 60)] = log(30, base=10)
@@ -79,6 +90,8 @@ VL_post_rebound = VL_post_rebound %>%
 
 ## combine it with `dat_log` and save it
 dat_log_rebound = dat_log %>% filter(animal_id != "RQc19")
+# 06/17: include RQc19 data as well
+dat_log_rebound = dat_log
 dat_log_rebound = cbind(dat_log_rebound, VL_post_rebound[,2:3])
 
 saveRDS(dat_log_rebound, "rebound_B2_with_postATI_VL.rds")
@@ -99,6 +112,8 @@ ggscatter(data = dat_log_rebound,
 
 # 2) look at peak/AUC vs all predictors
 ## compile a table of correlation coefficients
+All_covars = names(dat_log_rebound)[6:42] # not including A01 here
+  
 corrs_peak = NULL
 corrs_AUC = NULL
 for(n in All_covars){
@@ -129,6 +144,29 @@ All_covars[order(corrs_AUC, decreasing = T)]
 
 
 ### Important factors: 1) pre-ART viral load, 2) CA-DNA&RNA
+
+
+### 06/17 update
+### With peak: mostly negative correlation
+### With AUC: mostly postive correlation
+
+All_covars[order(abs(corrs_peak), decreasing = T)]
+# [1] "log_DNA_copies_RB_36"          
+# [2] "pos_auc_0_weeks_post_ATI"      
+# [3] "log_point_ic50_0_weekspost_ATI"
+# [4] "log_DNA_copies_LN_36"          
+# [5] "log_Abs_CD8_week8"             
+# [6] "log_peak_gp120" 
+
+All_covars[order(abs(corrs_AUC), decreasing = T)]
+# [1] "log_DNA_copies_Blood_36"       
+# [2] "log_DNA_copies_RB_36"          
+# [3] "log_RNA_copies_LN_8"           
+# [4] "log_RNA_copies_RB_56"          
+# [5] "log_DNA_copies_LN_36"          
+# [6] "log_DNA_copies_LN_8"           
+# [7] "log_vl_treat"
+
 
 # 3) visualize a bit
 ## post peak vs VL at treatment
@@ -168,5 +206,89 @@ ggscatter(data = dat_log_rebound,
           cor.coef = T)
 
 ### (outlier: RLg19 overly high post VL AUC)
+
+
+## 06/17 updated visualization
+## post peak vs RB DNA copies
+ggscatter(data = dat_log_rebound, 
+          y = "log_peakVL_postATI", x = "log_DNA_copies_RB_36",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+
+## post peak vs "pos_auc_0_weeks_post_ATI"
+ggscatter(data = dat_log_rebound, 
+          y = "log_peakVL_postATI", x = "pos_auc_0_weeks_post_ATI",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+
+## post peak vs "pos_auc_0_weeks_post_ATI"
+ggscatter(data = dat_log_rebound, 
+          y = "log_peakVL_postATI", x = "log_point_ic50_0_weekspost_ATI",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+
+
+## post VL AUC vs log_DNA_copies_Blood_36
+ggscatter(data = dat_log_rebound, 
+          y = "log_VL_AUC_postATI", x = "log_DNA_copies_Blood_36",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+
+## post VL AUC vs log_DNA_copies_RB_36
+ggscatter(data = dat_log_rebound, 
+          y = "log_VL_AUC_postATI", x = "log_DNA_copies_RB_36",
+          add = "reg.line",
+          add.params = list(color = "blue", fill = "lightgray"),
+          conf.int = T,
+          cor.coef = T)
+
+
+# 4) look at "A01"
+## log VL AUC
+ggplot(data=dat_log_rebound %>% filter(animal_id != "RQc19"), 
+       aes(x=A01, y=log_VL_AUC_postATI)) +
+  geom_boxplot() + 
+  theme_bw()
+
+## (as points...)
+ggplot(data=dat_log_rebound, 
+       aes(x=A01, y=log_VL_AUC_postATI)) +
+  #geom_boxplot() +
+  geom_point() + 
+  theme_bw()
+
+
+## Also perform a Mann-Whitney U test
+wilcox.test(dat_log_rebound$log_VL_AUC_postATI ~ dat_log_rebound$A01, 
+            alternative="greater", exact=T)
+
+# data:  dat_log_rebound$log_VL_AUC_postATI by dat_log_rebound$A01
+# W = 18, p-value = 0.1548
+# alternative hypothesis: true location shift is greater than 0
+
+
+## log peak VL
+ggplot(data=dat_log_rebound %>% filter(animal_id != "RQc19"), 
+       aes(x=A01, y=log_peakVL_postATI)) +
+  geom_boxplot() + 
+  theme_bw()
+
+## (as points...)
+ggplot(data=dat_log_rebound, 
+       aes(x=A01, y=log_peakVL_postATI)) +
+  geom_point() + 
+  theme_bw()
+
+
+
+
 
 
