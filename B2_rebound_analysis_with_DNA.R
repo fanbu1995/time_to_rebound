@@ -5,6 +5,10 @@
 # 06/03/2020
 # re-run some of the code with VL AUC included
 
+# 06/18/2020
+# re-do the univariate Cox PH model part
+# and adjust for FDR (the B-H method)
+
 ## package and directory setup
 library(tidyverse)
 library(survival)
@@ -106,6 +110,9 @@ All_covars = names(dat_log)[6:35]
 # (06/03/2020)
 All_covars = names(dat_log)[6:36]
 
+# (06/18/2020)
+All_covars = names(dat_log)[6:42]
+
 # 3.1 check concordance, the c-statistic
 
 C_stats = NULL
@@ -154,6 +161,20 @@ names(all_res_dat) = c("coef","exp(coef)","concordance",
 
 all_res_dat$predictor = All_covars
 all_res_dat
+
+## (06/18/2020)
+## adjust by FDR (q-values proposed by B and H)
+LR_pvals = all_res_dat$lik_ratio_test
+LR_qvals = p.adjust(LR_pvals, method = "fdr")
+
+## pick out the ones with FDR <= 0.2
+below_thres = which(LR_qvals <= 0.2)
+All_covars[below_thres]
+# [1] "pos_auc_0_weeks_post_ATI"
+LR_qvals[below_thres]
+# [1] 0.08808077
+
+
 
 ## save this result too
 write.csv(all_res_dat,"time_to_rebound/univariate_CoxPH_results_all.csv",
