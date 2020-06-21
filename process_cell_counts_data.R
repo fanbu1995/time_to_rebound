@@ -2,6 +2,9 @@
 # read in and process cell counts data for B2 group
 # Also: read in the process the "A01" status (MHC class labels)
 
+# 06/21/2020: modify data error! RQc19 censor time 1/17/2020
+# 98 days --> 168 days!
+
 library(tidyverse)
 setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
 
@@ -56,3 +59,8 @@ names(dat_log)[43] = "A01"
 # save the big data table
 saveRDS(dat_log, "reboundB2_logTrans_CellCounts_A01.rds")
 
+# 06/21/2020: modify data error! RQc19 censor time 1/17/2020
+# 98 days --> 168 days!
+
+dat_log$rebound_time_days_post_ati[5] = 168
+saveRDS(dat_log, "reboundB2_logTrans_CellCounts_A01.rds")
