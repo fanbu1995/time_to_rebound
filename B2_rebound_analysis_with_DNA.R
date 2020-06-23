@@ -9,6 +9,11 @@
 # re-do the univariate Cox PH model part
 # and adjust for FDR (the B-H method)
 
+# 06/23/2020
+# re-run all the things with
+# 1) more animal info columns
+# 2) the corrected data (RQc19 extended survival - 168 days)
+
 ## package and directory setup
 library(tidyverse)
 library(survival)
@@ -102,6 +107,10 @@ pairs(dat_log %>% select(log_peak_vl, log_vl_treat,
 # (load the latest data version)
 dat_log = readRDS("reboundB2_logTrans_withVLAUC.rds")
 
+# 06/23/2020
+# (load the latest data)
+dat_log = readRDS("reboundB2_logTrans_CellCounts_AnimalInfo.rds")
+
 
 # 3. Univariate survival models
 Response = "Surv(rebound_time_days_post_ati, observed)"
@@ -113,8 +122,11 @@ All_covars = names(dat_log)[6:36]
 # (06/18/2020)
 All_covars = names(dat_log)[6:42]
 
-# 3.1 check concordance, the c-statistic
+# (06/23/2020)
+# (include all covaraites except A01 and Sex - both are factors)
+All_covars = names(dat_log)[c(6:42,45:46)]
 
+# 3.1 check concordance, the c-statistic
 C_stats = NULL
 
 for(v in All_covars){
@@ -136,6 +148,11 @@ C_stats %>% arrange(desc(Concordance))
 ### (06/03/2020)
 ### - Still, pretty much same as before
 ### - log_vl_auc does better than other VL measures, ranked at #14
+
+### (06/23/2020)
+### - Same as before
+### "Challeng times" ranked #11, C=0.625
+### "Dosage" ranked #15, C=0.579
 
 # 3.2 Univariate Cox Proportional hazards model
 
