@@ -179,19 +179,6 @@ names(all_res_dat) = c("coef","exp(coef)","concordance",
 all_res_dat$predictor = All_covars
 all_res_dat
 
-## (06/18/2020)
-## adjust by FDR (q-values proposed by B and H)
-LR_pvals = all_res_dat$lik_ratio_test
-LR_qvals = p.adjust(LR_pvals, method = "fdr")
-
-## pick out the ones with FDR <= 0.2
-below_thres = which(LR_qvals <= 0.2)
-All_covars[below_thres]
-# [1] "pos_auc_0_weeks_post_ATI"
-LR_qvals[below_thres]
-# [1] 0.08808077
-
-
 
 ## save this result too
 write.csv(all_res_dat,"time_to_rebound/univariate_CoxPH_results_all.csv",
@@ -229,6 +216,45 @@ sort(lrt_pvals) < Thres
 ### All of them are FALSE! So at least using this method, can't reject the null...
 
 
+## (06/18/2020)
+## adjust by FDR (q-values proposed by B and H)
+LR_pvals = all_res_dat$lik_ratio_test
+LR_qvals = p.adjust(LR_pvals, method = "fdr")
+
+## pick out the ones with FDR <= 0.2
+below_thres = which(LR_qvals <= 0.2)
+All_covars[below_thres]
+# [1] "pos_auc_0_weeks_post_ATI"
+LR_qvals[below_thres]
+# [1] 0.08808077
+
+# (06/23/2020)
+# 0.09284
+
+
+# (06/23/2020)
+# 3.3 check on "Sex"
+# 1) KM curve stratified by Sex
+Sex_KM = survfit(Surv(rebound_time_days_post_ati, observed)~Sex, 
+                 data=dat_log)
+## prettier versions
+ggsurvplot(Sex_KM, data = dat_log, 
+           censor.shape="|", censor.size = 4,
+           size = 1.5, palette = c("#E7B800", "#2E9FDF"),
+           conf.int = FALSE,
+           ggtheme = theme_bw())
+
+# 2) fit a Cox PH model with `Sex`
+phmod_Sex = coxph(Surv(rebound_time_days_post_ati, observed)~Sex, 
+                  data = dat_log)
+summary(phmod_Sex)
+### Non-significant!
+# Concordance= 0.568  (se = 0.102 )
+# Likelihood ratio test= 0.85  on 1 df,   p=0.4
+# Wald test            = 0.82  on 1 df,   p=0.4
+# Score (logrank) test = 0.85  on 1 df,   p=0.4
+
+
 # 4. Bi-variate (two-predictor) Cox PH model
 
 ## Since pos_auc_0_weeks_post_ATI is highly correlated with 
@@ -246,6 +272,10 @@ Vars = names(dat_log)[c(6:16,25:35)]
 
 # 06/03/2020
 Vars = names(dat_log)[c(6:16,25:36)]
+
+# 06/23/2020
+Vars = names(dat_log)[c(6:16,25:42,45:46)]
+
 AIC_linear = NULL
 AIC_inter = NULL
 for(v in Vars){
@@ -276,6 +306,14 @@ add_pred_res %>% arrange(AIC_linear) %>% head()
 # 1           log_peak_vl_2   18.01492       19.91185
 # 2             log_peak_vl   19.07615       20.25586
 # 3              log_vl_auc   21.34036       23.25653
+
+### 06/23/2020: not much change but Abs_CD8_week8 is #3 now
+# second_predictor AIC_linear AIC_interation
+# 1        log_peak_vl_2   18.01492       19.91185
+# 2          log_peak_vl   19.07615       20.25586
+# 3    log_Abs_CD8_week8   19.93091       21.72761
+# 4           log_vl_auc   21.34036       23.25653
+# 5 log_RNA_copies_RB_56   21.85564       21.55774
 
 ## look at this new bivariate model
 phmod_auc0_peakVL2 = coxph(update(as.formula(f_auc0), ~ . + log_peak_vl_2), 
