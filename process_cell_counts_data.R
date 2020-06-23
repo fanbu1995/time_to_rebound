@@ -1,9 +1,12 @@
 # 06/15/2020
 # read in and process cell counts data for B2 group
-# Also: read in the process the "A01" status (MHC class labels)
+# Also: read in and process the "A01" status (MHC class labels)
 
 # 06/21/2020: modify data error! RQc19 censor time 1/17/2020
 # 98 days --> 168 days!
+
+# 06/23/2020: read in the "animal_information" data
+
 
 library(tidyverse)
 setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
@@ -64,3 +67,12 @@ saveRDS(dat_log, "reboundB2_logTrans_CellCounts_A01.rds")
 
 dat_log$rebound_time_days_post_ati[5] = 168
 saveRDS(dat_log, "reboundB2_logTrans_CellCounts_A01.rds")
+
+# 06/23/2020
+# add animal info columns (Sex, challenge_time, dosage)
+animal_info = read_csv("animal_information.csv")
+animal_info$animal_id == dat_log$animal_id
+
+# combine and save
+dat_log = cbind(dat_log, animal_info[,3:5])
+saveRDS(dat_log, "reboundB2_logTrans_CellCounts_AnimalInfo.rds")
