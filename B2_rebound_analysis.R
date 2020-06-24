@@ -155,6 +155,13 @@ pairs(dat_log %>% select(log_peak_vl:log_gp120_treat),
 #   - GP120 at peak
 # - GP120 concentration at peak and at treatment also highly correlated
 
+# (06/23/2020)
+# add "log_peak_vl_2"
+pairs(dat_log %>% select(log_peak_vl:log_gp120_treat, log_peak_vl_2), 
+      lower.panel = panel.cor, diag.panel = panel.hist)
+
+### log_peak_vl, log_peak_vl_2: cor = 0.99
+
 ## 3.2 RNA copies
 pairs(dat_log %>% select(log_RNA_copies_blood_8:log_RNA_copies_RB_56), 
       lower.panel = panel.cor, diag.panel = panel.hist)

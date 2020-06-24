@@ -132,3 +132,111 @@ predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
                                  Rebound_Effect = rebound_effect)
 
 
+# 4. Try "Lasso" Cox PH model with pre-selected predictors
+# (to decrease colinearity)
+
+# 4.1 put together a dataset with "manually selected" predictors
+dat_log_sel = dat_log %>% 
+  select(rebound_time_days_post_ati, observed,
+         log_peak_vl_2, log_gp41_treat,
+         log_RNA_copies_blood_56, log_RNA_copies_LN_56,
+         log_RNA_copies_RB_56, log_DNA_copies_Blood_36,
+         log_DNA_copies_LN_8, log_DNA_copies_LN_56,
+         log_DNA_copies_RB_16, log_DNA_copies_RB_56,
+         pos_auc_0_weeks_post_ATI,
+         log_Abs_CD4_week0, log_Abs_CD4_week8,
+         Challenge_times, Dosage)
+
+X = dat_log_sel[,3:17] %>% as.matrix()
+
+# 4.2 fit Lasso (alpha=1)
+phmod_lasso = glmnet(X, 
+                     Surv(dat_log_sel$rebound_time_days_post_ati, 
+                          dat_log_sel$observed),
+                     family = "cox")
+
+# (cross validation)
+## (using partial likelihood, 5-fold)
+cv_phmod_lasso1 = cv.glmnet(X, 
+                            Surv(dat_log_sel$rebound_time_days_post_ati, 
+                                 dat_log_sel$observed),
+                            family = "cox", nfolds = 5)
+plot(cv_phmod_lasso1)
+### somewhere between 1 and 4 predictors...
+### BUT! CV with 10 observations isn't very reliable
+### Probably can only get "promising predictors"
+
+## (using concordance, 5-fold)
+cv_phmod_lasso2 = cv.glmnet(X, 
+                            Surv(dat_log_sel$rebound_time_days_post_ati, 
+                                 dat_log_sel$observed),
+                            family = "cox", nfolds = 5,
+                            type.measure = "C")
+plot(cv_phmod_lasso2)
+### also, somewhere between between 1 and 4 predictors: 
+### C = close to 1
+
+## extract coefficients using the 1st CV results
+cv_phmod_lasso1$lambda.min
+# [1] 0.3589552
+coefficients <- coef(phmod_lasso, s = cv_phmod_lasso1$lambda.min)
+active_index <- which(coefficients != 0)
+active_coefficients <-coefficients[active_index]
+active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+
+### put together a table for this result
+cv_res = data.frame(Predictor = active_predictors, 
+                    Coefficient = active_coefficients)
+cv_res
+# Predictor  Coefficient
+# 1           log_gp41_treat -0.003705671
+# 2 pos_auc_0_weeks_post_ATI -6.054194923
+
+# 4.3 Use Lasso results to obtain a "predictor inclusion ranking"
+pred_in = NULL
+coef_sign = NULL
+
+for(l in cv_phmod_lasso1$lambda){
+  coefficients = coef(phmod_lasso, s = l)
+  active_index = which(coefficients != 0)
+  active_coefficients = coefficients[active_index]
+  active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+  
+  #cat(active_predictors, "\n")
+  
+  if(any(!active_predictors %in% pred_in)){
+    new_index = which(!active_predictors %in% pred_in)
+    pred_in = c(pred_in, active_predictors[new_index])
+    new_coef_sign = ifelse(active_coefficients[new_index] > 0, 
+                           "+", "-")
+    coef_sign = c(coef_sign, new_coef_sign)
+  }
+}
+
+## get a vector of "effect on rebound"
+## (+: accelerate; -: delay)
+rebound_effect = sapply(coef_sign, 
+                        function(x) ifelse(x=="+","accelerate","delay")) %>%
+  as.vector()
+
+## also get a vector of (univariate) concordance
+Response = "Surv(rebound_time_days_post_ati, observed)"
+#All_covars = names(dat_log_sel)[3:17]
+All_covars = pred_in
+
+# 3.1 check concordance, the c-statistic
+C_stats = NULL
+
+for(v in All_covars){
+  f = as.formula(paste(Response,v,sep = " ~ "))
+  C_v = concordance(f, data=dat_log_sel, timewt = "n")$concordance
+  C_stats = c(C_stats, C_v)
+}
+
+## put together a summary table of this thing
+predictor_inclusion = data.frame(Inclusion_Rank = c(1:8),
+                                 Predictor = pred_in,
+                                 Coefficient = coef_sign,
+                                 Rebound_Effect = rebound_effect,
+                                 Concordance = C_stats)
+predictor_inclusion

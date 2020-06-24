@@ -102,6 +102,17 @@ pairs(dat_log %>% select(log_peak_vl, log_vl_treat,
                          log_DNA_copies_Blood_8:log_DNA_copies_RB_56),
       lower.panel = panel.cor, diag.panel = panel.hist)
 
+### Not much correlation
+
+## (06/23/2020)
+## 2.5: check cell counts
+pairs(dat_log %>% select(log_Abs_CD4_week0:log_Abs_CD8_week8),
+      lower.panel = panel.cor, diag.panel = panel.hist)
+
+### Findings:
+### - High correlation between CD4 and CD8 counts in same week
+### - Also high correlation between consecutive-week counts
+
 
 # 06/03/2020
 # (load the latest data version)
