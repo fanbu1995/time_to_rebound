@@ -1,0 +1,233 @@
+---
+title: "B2 Rebound Analysis Update"
+author: "Fan Bu"
+date: "6/23/2020"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_knit$set(root.dir = "~/Documents/Research_and_References/HIV_rebound_summer2020/")
+knitr::opts_chunk$set(fig.width=8, fig.height=6, fig.align = "center")
+```
+
+```{r setup 2, echo=FALSE, message=F, warning=F}
+library(tidyverse)
+library(survival)
+library(survminer)
+library(glmnet)
+
+```
+
+## Overview
+
+Main updates
+
+- Added more "animal information": Sex, challenge numbers, dosage
+- Adjusted for FDR (using q-values) of the univariate Cox PH models
+- Re-ran Cox PH "Lasso" model with manually selected predictors (took out the ones with high correlation to avoid colinearity)
+- Literature review (on statistical inference of dynamical models)
+
+## Investigating more predictors
+
+```{r load data, echo=FALSE}
+dat_log = readRDS("reboundB2_logTrans_CellCounts_AnimalInfo.rds")
+```
+
+The updated list of potential predictors:
+
+- **Animal characteristics**: Sex, A01, challenge number, dosage
+- **Viral load pre ART**: peak viral load, viral load at treatment & area-under-VL-curve
+- **Antibody response**:
+    - ELISA: GP41 and GP120, peak level and level at treatment
+    - Neutralization: Point IC50 & Pos AUC measured at 0, 2, 4, 8 weeks post ATI
+- **Cell-associated RNA and DNA**: 
+    - SHIV RNA copies per million cell RNA: measured in blood, lymph node and rectal biopsy at 8 and 56 weeks post infection (RB only at 56 weeks)
+    - SHIV DNA copies per million cell DNA: measured in blood, lymph node and rectal biopsy at 8, 16, 36 and 56 weeks post infection (no RB at 8 weeks)
+- **Absolute CD4 and CD8 cell counts**:
+    - Estimated using flow cytometry and CBC data
+    - "Measurements" at 0, 4, 8 weeks
+
+    
+## On animal characteristics
+
+- Sex and A01 (both are factor variables): no significant effect on time to rebound
+- Challenge number and dosage: not very high concordance with order to rebound
+    - challeng number: $C = 0.625$ (ranked #11)
+    - dosage: $C=0.579$ (ranked #15)
+  
+Below is the KM curve stratified by Sex. The univariate Cox PH model fitted with `Sex` as the predictor doesn't suggest any significant effect either ($p=0.4$ by LRT).
+
+```{r KM curve by Sex, echo=FALSE}
+Sex_KM = survfit(Surv(rebound_time_days_post_ati, observed)~Sex, 
+                 data=dat_log)
+## prettier versions
+ggsurvplot(Sex_KM, data = dat_log, 
+           censor.shape="|", censor.size = 4,
+           size = 1.5, palette = c("#E7B800", "#2E9FDF"),
+           conf.int = FALSE,
+           ggtheme = theme_bw())
+```
+
+## Adjust for FDR (univariate models)
+A univriate model is fitted for each of the potential predictors (updated), and for each model, the **q-value** (or "FDR", proposed by Benjamini & Hochberg (1995)) is computed based on the p-value of likelihood-ratio-test for significance. 
+
+The only predictor with a FDR $<0.2$ is `pos_auc_0_weeks_post_ATI`, with a q-value of $0.09284$.
+
+## "CoxNet" with pre-selected predictors
+
+A "candidate pool" of potential predictors is manually selected after examining the pairwise correlation between all predictors in the dataset. 
+
+(The general selection criterion is to drop one of two variables if the correlation is $>0.6$ - this is not carried out very strictly as the goal is simply to avoid too much collinearity).
+
+After the manual selection, the number of numerical predictors is reduced from $39$ to $15$.
+
+A "best model" is obtained via 5-fold cross validation (again, the outcome isn't very stable). 
+
+```{r coxnet, echo=F}
+# 4.1 put together a dataset with "manually selected" predictors
+dat_log_sel = dat_log %>% 
+  select(rebound_time_days_post_ati, observed,
+         log_peak_vl_2, log_gp41_treat,
+         log_RNA_copies_blood_56, log_RNA_copies_LN_56,
+         log_RNA_copies_RB_56, log_DNA_copies_Blood_36,
+         log_DNA_copies_LN_8, log_DNA_copies_LN_56,
+         log_DNA_copies_RB_16, log_DNA_copies_RB_56,
+         pos_auc_0_weeks_post_ATI,
+         log_Abs_CD4_week0, log_Abs_CD4_week8,
+         Challenge_times, Dosage)
+
+X = dat_log_sel[,3:17] %>% as.matrix()
+
+# 4.2 fit Lasso (alpha=1)
+phmod_lasso = glmnet(X, 
+                     Surv(dat_log_sel$rebound_time_days_post_ati, 
+                          dat_log_sel$observed),
+                     family = "cox")
+
+# (cross validation)
+## (using partial likelihood, 5-fold)
+cv_phmod_lasso1 = cv.glmnet(X, 
+                            Surv(dat_log_sel$rebound_time_days_post_ati, 
+                                 dat_log_sel$observed),
+                            family = "cox", nfolds = 5)
+#plot(cv_phmod_lasso1)
+### somewhere between 1 and 4 predictors...
+### BUT! CV with 10 observations isn't very reliable
+### Probably can only get "promising predictors"
+
+## (using concordance, 5-fold)
+cv_phmod_lasso2 = cv.glmnet(X, 
+                            Surv(dat_log_sel$rebound_time_days_post_ati, 
+                                 dat_log_sel$observed),
+                            family = "cox", nfolds = 5,
+                            type.measure = "C")
+#plot(cv_phmod_lasso2)
+### also, somewhere between between 1 and 4 predictors: 
+### C = close to 1
+
+## extract coefficients using the 1st CV results
+# cv_phmod_lasso1$lambda.min
+# [1] 0.3589552
+coefficients <- coef(phmod_lasso, s = cv_phmod_lasso1$lambda.min)
+active_index <- which(coefficients != 0)
+active_coefficients <-coefficients[active_index]
+active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+
+### put together a table for this result
+cv_res = data.frame(Predictor = active_predictors, 
+                    Coefficient = active_coefficients)
+knitr::kable(cv_res, digits = 4)
+
+# Predictor  Coefficient
+# 1           log_gp41_treat -0.003705671
+# 2 pos_auc_0_weeks_post_ATI -6.054194923
+```
+
+## "CoxNet" with pre-selected predictors (Cont'd)
+
+Same as last time, we can also get a "predictor inclusion ranking table" from the model outcomes.
+
+For comparison, here the (univariate) concordance for each predictor is also presented in the table.
+
+```{r coxnet predictor ranking, echo=F}
+# 4.3 Use Lasso results to obtain a "predictor inclusion ranking"
+pred_in = NULL
+coef_sign = NULL
+
+for(l in cv_phmod_lasso1$lambda){
+  coefficients = coef(phmod_lasso, s = l)
+  active_index = which(coefficients != 0)
+  active_coefficients = coefficients[active_index]
+  active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+  
+  #cat(active_predictors, "\n")
+  
+  if(any(!active_predictors %in% pred_in)){
+    new_index = which(!active_predictors %in% pred_in)
+    pred_in = c(pred_in, active_predictors[new_index])
+    new_coef_sign = ifelse(active_coefficients[new_index] > 0, 
+                           "+", "-")
+    coef_sign = c(coef_sign, new_coef_sign)
+  }
+}
+
+## get a vector of "effect on rebound"
+## (+: accelerate; -: delay)
+rebound_effect = sapply(coef_sign, 
+                        function(x) ifelse(x=="+","accelerate","delay")) %>%
+  as.vector()
+
+## also get a vector of (univariate) concordance
+Response = "Surv(rebound_time_days_post_ati, observed)"
+#All_covars = names(dat_log_sel)[3:17]
+All_covars = pred_in
+
+# 3.1 check concordance, the c-statistic
+C_stats = NULL
+
+for(v in All_covars){
+  f = as.formula(paste(Response,v,sep = " ~ "))
+  C_v = concordance(f, data=dat_log_sel, timewt = "n")$concordance
+  C_stats = c(C_stats, C_v)
+}
+
+## put together a summary table of this thing
+predictor_inclusion = data.frame(Inclusion_Rank = c(1:8),
+                                 Predictor = pred_in,
+                                 Coefficient = coef_sign,
+                                 Rebound_Effect = rebound_effect,
+                                 Concordance = C_stats)
+
+knitr::kable(predictor_inclusion, digits = 4)
+```
+
+## On literature review
+
+The general framework of parameter estimation for ODE-based models:
+
+$$
+\begin{align}
+x'(t) &= f(t, x(t), \theta),\\
+x(0) &= x_0,\\
+y(t) &= h(x(t), x_0, \theta) + \epsilon(t).
+\end{align}
+$$
+Here $x(t)$ is the "mechanistic" model and $y(t)$ is the observed data. The goal is to estimate $\theta$. 
+
+Main approaches:
+
+- Work with $\epsilon(t)$ to elicit a "likelihood", and then do MLE 
+    - oftentimes it's reduced to nonlinear LS
+    - but can be more complicated if, say, the model is hierarchical (e.g., mixed effects model)
+- "Smooth" $y(t)$ to get an estimate of $x(t)$ and then work with $x'(t)$ directly
+    - "nonparametric" (using splines) so somewhat more flexible
+    - minimizing $\lVert \hat{x}'(t) - x'(t) \rVert_2$ can be easier and doesn't require knowing the initial conditions accurately
+
+
+
+My plan is to read up more on:
+
+- likelihood-free methods (e.g., ABC, ABC-SMC, and others)
+- simulation-based methods (e.g., model-based proposals, particle filtering, etc.)
+- approximation techniques (e.g., linear noise approximation)
