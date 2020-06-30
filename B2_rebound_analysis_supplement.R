@@ -146,8 +146,29 @@ dat_log_sel = dat_log %>%
          pos_auc_0_weeks_post_ATI,
          log_Abs_CD4_week0, log_Abs_CD4_week8,
          Challenge_times, Dosage)
-
 X = dat_log_sel[,3:17] %>% as.matrix()
+## here: 15 predictors
+
+## (06/29/2020)
+## a version with more predictors allowed
+## cross corr < 0.8
+dat_log_sel = dat_log %>% 
+  select(rebound_time_days_post_ati, observed,
+         log_peak_vl_2, log_vl_treat,
+         log_peak_gp41, log_peak_gp120,
+         log_RNA_copies_blood_56, log_RNA_copies_LN_56,
+         log_RNA_copies_RB_56, 
+         log_DNA_copies_Blood_16:log_DNA_copies_Blood_56,
+         log_DNA_copies_LN_36, log_DNA_copies_LN_56,
+         log_DNA_copies_RB_16:log_DNA_copies_RB_56,
+         pos_auc_0_weeks_post_ATI, pos_auc_4_weeks_post_ATI,
+         pos_auc_8_weeks_post_ATI,
+         log_Abs_CD4_week0:log_Abs_CD4_week8,
+         Challenge_times, Dosage)
+
+## right now: 23 predictors
+X = dat_log_sel[,3:25] %>% as.matrix()
+
 
 # 4.2 fit Lasso (alpha=1)
 phmod_lasso = glmnet(X, 
@@ -221,10 +242,8 @@ rebound_effect = sapply(coef_sign,
 
 ## also get a vector of (univariate) concordance
 Response = "Surv(rebound_time_days_post_ati, observed)"
-#All_covars = names(dat_log_sel)[3:17]
 All_covars = pred_in
 
-# 3.1 check concordance, the c-statistic
 C_stats = NULL
 
 for(v in All_covars){
@@ -233,10 +252,24 @@ for(v in All_covars){
   C_stats = c(C_stats, C_v)
 }
 
+## 06/29/2020
+## get a vector of multivariate (cumulative concordance)
+Response = "Surv(rebound_time_days_post_ati, observed)"
+
+Cum_C_stats = NULL
+for(i in 1:length(pred_in)){
+  covars = pred_in[1:i]
+  f = as.formula(paste(Response,paste(covars,collapse = "+"),sep = " ~ "))
+  mod = coxph(f, data=dat_log_sel)
+  C_covars = mod$concordance['concordance'] %>% as.numeric()
+  Cum_C_stats = c(Cum_C_stats, C_covars)
+}
+
 ## put together a summary table of this thing
-predictor_inclusion = data.frame(Inclusion_Rank = c(1:8),
+predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
                                  Predictor = pred_in,
                                  Coefficient = coef_sign,
                                  Rebound_Effect = rebound_effect,
-                                 Concordance = C_stats)
+                                 #Concordance = C_stats)
+                                 Cum_concordance = Cum_C_stats)
 predictor_inclusion

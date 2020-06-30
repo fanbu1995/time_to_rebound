@@ -78,30 +78,39 @@ The only predictor with a FDR $<0.2$ is `pos_auc_0_weeks_post_ATI`, with a q-val
 
 A "candidate pool" of potential predictors is manually selected after examining the pairwise correlation between all predictors in the dataset. 
 
-(The general selection criterion is to drop one of two variables if the correlation is $>0.6$ - this is not carried out very strictly as the goal is simply to avoid too much collinearity).
+<!-- (The general selection criterion is to drop one of two variables if the correlation is $>0.6$ - this is not carried out very strictly as the goal is simply to avoid too much collinearity). -->
 
-After the manual selection, the number of numerical predictors is reduced from $39$ to $15$.
+<!-- After the manual selection, the number of numerical predictors is reduced from $39$ to $15$. -->
+
+(The general selection criterion is to drop one of two variables if the correlation is $>0.8$ - this is not carried out very strictly as the goal is simply to avoid too much collinearity).
+
+After the manual selection, the number of numerical predictors is reduced from $39$ to $23$.
 
 A "best model" is obtained via 5-fold cross validation (again, the outcome isn't very stable). 
 
 ```{r coxnet, echo=F}
 # 4.1 put together a dataset with "manually selected" predictors
+
 dat_log_sel = dat_log %>% 
   select(rebound_time_days_post_ati, observed,
-         log_peak_vl_2, log_gp41_treat,
+         log_peak_vl_2, log_vl_treat,
+         log_peak_gp41, log_peak_gp120,
          log_RNA_copies_blood_56, log_RNA_copies_LN_56,
-         log_RNA_copies_RB_56, log_DNA_copies_Blood_36,
-         log_DNA_copies_LN_8, log_DNA_copies_LN_56,
-         log_DNA_copies_RB_16, log_DNA_copies_RB_56,
-         pos_auc_0_weeks_post_ATI,
-         log_Abs_CD4_week0, log_Abs_CD4_week8,
+         log_RNA_copies_RB_56, 
+         log_DNA_copies_Blood_16:log_DNA_copies_Blood_56,
+         log_DNA_copies_LN_36, log_DNA_copies_LN_56,
+         log_DNA_copies_RB_16:log_DNA_copies_RB_56,
+         pos_auc_0_weeks_post_ATI, pos_auc_4_weeks_post_ATI,
+         pos_auc_8_weeks_post_ATI,
+         log_Abs_CD4_week0:log_Abs_CD4_week8,
          Challenge_times, Dosage)
 
-X = dat_log_sel[,3:17] %>% as.matrix()
+## right now: 23 predictors
+X = dat_log_sel[,3:25] %>% as.matrix()
+
 
 # 4.2 fit Lasso (alpha=1)
-phmod_lasso = glmnet(X, 
-                     Surv(dat_log_sel$rebound_time_days_post_ati, 
+phmod_lasso = glmnet(X, Surv(dat_log_sel$rebound_time_days_post_ati, 
                           dat_log_sel$observed),
                      family = "cox")
 
@@ -122,14 +131,13 @@ cv_phmod_lasso2 = cv.glmnet(X,
                                  dat_log_sel$observed),
                             family = "cox", nfolds = 5,
                             type.measure = "C")
-#plot(cv_phmod_lasso2)
-### also, somewhere between between 1 and 4 predictors: 
-### C = close to 1
+plot(cv_phmod_lasso2)
 
-## extract coefficients using the 1st CV results
-# cv_phmod_lasso1$lambda.min
+
+## extract coefficients using the 2st CV results
+# cv_phmod_lasso2$lambda.min
 # [1] 0.3589552
-coefficients <- coef(phmod_lasso, s = cv_phmod_lasso1$lambda.min)
+coefficients <- coef(phmod_lasso, s = cv_phmod_lasso2$lambda.min)
 active_index <- which(coefficients != 0)
 active_coefficients <-coefficients[active_index]
 active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
@@ -138,19 +146,15 @@ active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
 cv_res = data.frame(Predictor = active_predictors, 
                     Coefficient = active_coefficients)
 knitr::kable(cv_res, digits = 4)
-
-# Predictor  Coefficient
-# 1           log_gp41_treat -0.003705671
-# 2 pos_auc_0_weeks_post_ATI -6.054194923
 ```
 
 ## "CoxNet" with pre-selected predictors (Cont'd)
 
 Same as last time, we can also get a "predictor inclusion ranking table" from the model outcomes.
 
-For comparison, here the (univariate) concordance for each predictor is also presented in the table.
+Here in row $n$, we also provide the multivariate concordance using predictors $1,2,\ldots,n$. Understandably, concordance can reach 1 (or very close to 1) when we add more and more predictors, but this is not desired as a super good fit to the data often leads to overfitting; we may want to stop at 4 or even less predictors to be safe.
 
-```{r coxnet predictor ranking, echo=F}
+```{r coxnet predictor ranking, echo=F, warning=F, message=F}
 # 4.3 Use Lasso results to obtain a "predictor inclusion ranking"
 pred_in = NULL
 coef_sign = NULL
@@ -179,25 +183,38 @@ rebound_effect = sapply(coef_sign,
   as.vector()
 
 ## also get a vector of (univariate) concordance
+# Response = "Surv(rebound_time_days_post_ati, observed)"
+# All_covars = pred_in
+# 
+# C_stats = NULL
+# 
+# for(v in All_covars){
+#   f = as.formula(paste(Response,v,sep = " ~ "))
+#   C_v = concordance(f, data=dat_log_sel, timewt = "n")$concordance
+#   C_stats = c(C_stats, C_v)
+# }
+
+## 06/29/2020
+## get a vector of multivariate (cumulative concordance)
 Response = "Surv(rebound_time_days_post_ati, observed)"
-#All_covars = names(dat_log_sel)[3:17]
-All_covars = pred_in
 
-# 3.1 check concordance, the c-statistic
-C_stats = NULL
-
-for(v in All_covars){
-  f = as.formula(paste(Response,v,sep = " ~ "))
-  C_v = concordance(f, data=dat_log_sel, timewt = "n")$concordance
-  C_stats = c(C_stats, C_v)
+Cum_C_stats = NULL
+for(i in 1:length(pred_in)){
+  covars = pred_in[1:i]
+  f = as.formula(paste(Response,paste(covars,collapse = "+"),sep = " ~ "))
+  mod = coxph(f, data=dat_log_sel)
+  C_covars = mod$concordance['concordance'] %>% as.numeric()
+  Cum_C_stats = c(Cum_C_stats, C_covars)
 }
 
 ## put together a summary table of this thing
-predictor_inclusion = data.frame(Inclusion_Rank = c(1:8),
+predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
                                  Predictor = pred_in,
                                  Coefficient = coef_sign,
                                  Rebound_Effect = rebound_effect,
-                                 Concordance = C_stats)
+                                 #Concordance = C_stats)
+                                 Cum_concordance = Cum_C_stats)
+#predictor_inclusion
 
 knitr::kable(predictor_inclusion, digits = 4)
 ```
@@ -225,9 +242,88 @@ Main approaches:
     - minimizing $\lVert \hat{x}'(t) - x'(t) \rVert_2$ can be easier and doesn't require knowing the initial conditions accurately
 
 
+<!-- My plan is to read up more on: -->
 
-My plan is to read up more on:
+<!-- - likelihood-free methods (e.g., ABC, ABC-SMC, and others) -->
+<!-- - simulation-based methods (e.g., model-based proposals, particle filtering, etc.) -->
+<!-- - approximation techniques (e.g., linear noise approximation) -->
 
-- likelihood-free methods (e.g., ABC, ABC-SMC, and others)
-- simulation-based methods (e.g., model-based proposals, particle filtering, etc.)
-- approximation techniques (e.g., linear noise approximation)
+<!-- ## Literature review (Cont'd) -->
+
+## Estimation framework based on linear noise approximation and generalized least squares
+
+Start with a continuous-time Markov Chain formulation, and for simplicity, only work with a 1-d process (multi-dim case is very similar).
+
+Suppose that, for process $y(t)$, $a(y(t))$ is the instantaneous rate; i.e.,
+
+$$
+a(y(t)) \Delta t = \text{prob. of an event in infinitesimal interval } [t, t+\Delta t).
+$$
+
+Now we discretize the process by considering the process value at a time step $\tau$. Assume that $\tau$ satisfies the following two conditions:
+
+1. $a(y(t))$ is approximately constant on $[t,t+\tau)$,
+2. $a(y(t))\tau >> 1$.
+
+(Note that these two conditions are easy to satisfy in a system very close to the thermodynamic limit, but can be hard to satisfy in a small-size population.)
+
+**Condition 1** means that the event count on interval $[t,t+\tau)$, $\Delta y(t,\tau)$, can be approximated by a Poisson random variable with rate $a(y(t))\tau$.
+
+**Condition 2** suggests that $E(\Delta y(t,\tau))$ is large enough that $\Delta y(t,\tau)$ can be approximated by $N(a(y(t))\tau, a(y(t))\tau)$. 
+
+Therefore, we have
+$$
+y(t+\tau) \approx y(t) + a(y(t))\tau + N(0, a(y(t))\tau),
+$$
+and by induction,
+$$
+\begin{align}
+y(n\tau) &\approx y(0) + \tau \sum_{k=0}^{n-1} a(y(k\tau)) + N\left(0, \tau \sum_{k=0}^{n-1} a(y(k\tau))\right)\\
+&= E(y(n\tau)) + N(0, E(y(n\tau))).
+\end{align}
+$$
+Here the second step is achieved assuming $y(0)=0$ (which can be done by subtracting a common "intercept" of the curve).
+
+Now we can apply this approximation to the ODE framework. Assume that the observed data $y(t)$ is simply a perturbed value centered around the real system mean $x(t)$,
+$$
+y(t) = x(t; \theta) + \epsilon(t).
+$$
+Then we can assume that
+$$
+\epsilon(t) \sim N(0, \sigma^2(t))
+$$
+where $\sigma^2(t)$ scales by $x(t;\theta)$. If we allow some degree of dispersion, then we can parametrize it by
+$$
+\sigma^2(t) = \gamma x(t;\theta).
+$$
+
+Parameter estimation can be accomplished by iterative generalized least squares (iGLS) procedure:
+
+First, get an initial estimate $\theta^{(1)}$ via
+$$
+\theta^{(1)} = \text{argmin}_{\theta} \sum_{i=1}^N\frac{(y(t_i)-x(t_i;\theta))^2}{x(t_i;\theta)},
+$$
+where $\theta$ on the denominator can be replaced by some other initial estimate $\theta^{(0)}$.
+
+Then with $k=1:\text{maxIter}$, iteratively repeat the following two steps until convergence:
+1. Estimate the variation scalar (the dispersion parameter) $\gamma$
+$$
+\gamma = \frac{1}{N-p} \sum_{i=1}^N\frac{(y(t_i)-x(t_i;\theta^{(k)}))^2}{x(t_i;\theta^{(k)})},
+$$
+where $p$ is the dimension of the parameter $\theta$.
+
+2. Update parameter $\theta$ by weighted least squares
+$$
+\theta^{(k+1)} = \text{argmin}_{\theta} \sum_{i=1}^N\frac{(y(t_i)-x(t_i;\theta))^2}{\gamma x(t_i;\theta^{(k)})}.
+$$
+
+Major shortcoming of this method: it requires solving the ODE curve $x(t;\theta)$ repeatedly for any parameter setting $\theta$. BUT $x(t)$ can also be computed using the discrete approximation expression mentioned above, i.e., 
+$$
+x(t) = E(y(t)) = \text{sum of interval event rates}.
+$$
+
+## References
+
+Adams et al. (2005). HIV dynamics: Modeling, data analysis, and optimal treatment protocols. *Journal of computational and applied mathematics*. 
+
+Wallace et al. (2012). Linear noise approximation is valid over limited times for any chemical systems that is sufficiently large. *IET systems biology*.
