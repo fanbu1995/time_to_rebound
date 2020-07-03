@@ -265,11 +265,40 @@ for(i in 1:length(pred_in)){
   Cum_C_stats = c(Cum_C_stats, C_covars)
 }
 
+## 07/02/2020:
+## get leave-one-out CV results
+## (in terms of deviance, i.e., partial likelihood)
+cv_phmod_lasso3 = cv.glmnet(X, 
+                            Surv(dat_log_sel$rebound_time_days_post_ati, 
+                                 dat_log_sel$observed),
+                            family = "cox", nfolds = 10, keep = T)
+
+pred_in2 = NULL
+LOO_deviance = NULL
+for(l in cv_phmod_lasso3$lambda){
+  coefficients = coef(phmod_lasso, s = l)
+  active_index = which(coefficients != 0)
+  #active_coefficients = coefficients[active_index]
+  active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+  
+  #cat(active_predictors, "\n")
+  
+  if(any(!active_predictors %in% pred_in2)){
+    new_index = which(!active_predictors %in% pred_in2)
+    pred_in2 = c(pred_in2, active_predictors[new_index])
+    
+    l_index = which(cv_phmod_lasso3$lambda == l)
+    LOO_deviance = c(LOO_deviance, cv_phmod_lasso3$cvm[l_index])
+  }
+}
+
+
 ## put together a summary table of this thing
 predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
                                  Predictor = pred_in,
                                  Coefficient = coef_sign,
                                  Rebound_Effect = rebound_effect,
                                  #Concordance = C_stats)
-                                 Cum_concordance = Cum_C_stats)
+                                 Cum_concordance = Cum_C_stats,
+                                 LOOCV_deviance = LOO_deviance)
 predictor_inclusion
