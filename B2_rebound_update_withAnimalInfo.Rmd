@@ -1,7 +1,7 @@
 ---
 title: "B2 Rebound Analysis Update"
 author: "Fan Bu"
-date: "6/23/2020"
+date: "07/07/2020"
 output: slidy_presentation
 ---
 
@@ -207,13 +207,43 @@ for(i in 1:length(pred_in)){
   Cum_C_stats = c(Cum_C_stats, C_covars)
 }
 
+## 07/02/2020:
+## get leave-one-out CV results
+## (in terms of deviance, i.e., partial likelihood)
+cv_phmod_lasso3 = cv.glmnet(X, 
+                            Surv(dat_log_sel$rebound_time_days_post_ati, 
+                                 dat_log_sel$observed),
+                            family = "cox", nfolds = 10, keep = T)
+
+pred_in2 = NULL
+LOO_deviance = NULL
+for(l in cv_phmod_lasso3$lambda){
+  coefficients = coef(phmod_lasso, s = l)
+  active_index = which(coefficients != 0)
+  #active_coefficients = coefficients[active_index]
+  active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+  
+  #cat(active_predictors, "\n")
+  
+  if(any(!active_predictors %in% pred_in2)){
+    new_index = which(!active_predictors %in% pred_in2)
+    pred_in2 = c(pred_in2, active_predictors[new_index])
+    
+    l_index = which(cv_phmod_lasso3$lambda == l)
+    LOO_deviance = c(LOO_deviance, cv_phmod_lasso3$cvm[l_index])
+  }
+}
+
+
 ## put together a summary table of this thing
 predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
                                  Predictor = pred_in,
                                  Coefficient = coef_sign,
                                  Rebound_Effect = rebound_effect,
                                  #Concordance = C_stats)
-                                 Cum_concordance = Cum_C_stats)
+                                 Cum_concordance = Cum_C_stats,
+                                 LOOCV_deviance = LOO_deviance)
+
 #predictor_inclusion
 
 knitr::kable(predictor_inclusion, digits = 4)
@@ -321,6 +351,40 @@ Major shortcoming of this method: it requires solving the ODE curve $x(t;\theta)
 $$
 x(t) = E(y(t)) = \text{sum of interval event rates}.
 $$
+
+## Simulation experiment (simple example)
+
+Assume the following 1-d ODE system:
+$$
+\begin{align}
+x'(t) &= \lambda x(t),\\
+x(0) &= 1.
+\end{align}
+$$
+That is, 
+$$
+x(t) = e^{\lambda t},
+$$
+where $\lambda$ is the parameter of interest. 
+
+The stochastic version of this dynamic model would be a CTMC $y(t)$ with instantaneous rate function $\gamma y(t)$ and $y(0)=1$. This is a pure-birth process with brith rate $\gamma$.
+
+The "true" process sequence is simulated from such a CTMC, and then discrete "observations" are obtained every $\tau$ time units. The iGLS procedure described above is applied to the discrete observed data to acquire an estimate of $\lambda$. This estimate is also compared with that obtained using nonlinear least squares (optimzation via Gauss-Newton algorithm).
+
+The plot below shows estimation errors of the proposed framework (**Approx**) and **NLS**. All the observed datapoints are from the first 10 time units (to mimic the randomness of small-populations/initial dynamics), with ground truth $\lambda = 0.3, 0.5, 1$ and discrete time step $\tau = 0.2, 0.5, 1$. For each setting the experiment is repeated 20 times. 
+
+```{r estimation Exponential, echo=F, warning=FALSE, message=F}
+Res = readRDS("ODE_inference/Exponential_simulation_res.rds")
+
+ggplot(data=Res, aes(x=method,y=error)) +
+  geom_hline(yintercept = 0, size=1, color="gray") +
+  geom_boxplot() +
+  #geom_violin() +
+  theme_bw(base_size = 14)+
+  facet_grid(lambda~tau)
+```
+
+
 
 ## References
 
