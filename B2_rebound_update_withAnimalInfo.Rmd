@@ -405,13 +405,17 @@ Take the B2 group as example. We have
 
 Potential solutions:
 
-1. Assume a "reasonable" trajectory of $I$ (e.g., let $I$ simply be some small fraction of $T$) and reduce the system to a 2-dim one; and then we can
-    - do NLS
-    - do something like ABC (operates on a grid of parameter values and accepts parameters that can produce "close enough" trajectories)
+1. Assume a "reasonable" trajectory for $I$ (e.g., let $I$ simply be some small fraction of $T$) and reduce the system to a 2-dim one, and then we can do NLS
+    <!-- - do something like ABC (operates on a grid of parameter values and accepts parameters that can produce "close enough" trajectories) -->
 2. Adopt a simulation-based approach (a Bayesian approach), which 
     - requires writing down the "complete data likelihood"; and rigorously that involves converting the ODE system into a continuous-time Markov Chain (or at least an approximation of it)
     - iteratively proposes parameter values and event sequences ("complete data") and then accepts/rejects the proposals according to a Metropolis-Hastings ratio
-    - technically can deal with an unobserved dimension, **but** it won't be computationally efficient (the latent space is very high-dimensional), and with this specific model there is an identifiability issue (due to the $kI$ and $d_I I$ terms)
+    - can technically deal with an unobserved dimension, **but** it won't be computationally efficient (the latent space is very high-dimensional), and with this specific model there is an identifiability issue (due to the $kI$ and $d_I I$ terms)
+    - can give the "real" parameter posterior and uncertainty quantification
+3. An ABC-type approach, which
+    - is "likelihood-free", but requires carefull choice of the distance/discrepancy function between simulated data $y^*$ and observed data $y$; the good thing is, with dynamical systems, we can directly compare data points instead of making up summary statistics
+    - enables model comparison by allowing for Bayes factor computation
+    - also can technically deal with unobserved dimensions
     
 
 
@@ -420,3 +424,5 @@ Potential solutions:
 Adams et al. (2005). HIV dynamics: Modeling, data analysis, and optimal treatment protocols. *Journal of computational and applied mathematics*. 
 
 Wallace et al. (2012). Linear noise approximation is valid over limited times for any chemical systems that is sufficiently large. *IET systems biology*.
+
+Toni et al. (2008). Approximate Bayesian computation scheme for parameter inference and model selection in dynamical systems." *Journal of the Royal Society Interface*.
