@@ -385,6 +385,35 @@ ggplot(data=Res, aes(x=method,y=error)) +
 ```
 
 
+## Unmeasured (sparsely measured) dimensions?
+
+Consider the simple viral dynamics model:
+
+$$
+\begin{align}
+    \dot{T}&=\lambda-\beta T V-d_{T} T\\
+    \dot{I}&=\beta T V-d_{I} I \\
+    \dot{V}&=kI-c V
+\end{align}
+$$
+
+Take the B2 group as example. We have
+
+- (almost) weekly measurements of $V$
+- 3 measurements (at week 0, 4, 8) of $T$
+- no measurements of $I$
+
+Potential solutions:
+
+1. Assume a "reasonable" trajectory of $I$ (e.g., let $I$ simply be some small fraction of $T$) and reduce the system to a 2-dim one; and then we can
+    - do NLS
+    - do something like ABC (operates on a grid of parameter values and accepts parameters that can produce "close enough" trajectories)
+2. Adopt a simulation-based approach (a Bayesian approach), which 
+    - requires writing down the "complete data likelihood"; and rigorously that involves converting the ODE system into a continuous-time Markov Chain (or at least an approximation of it)
+    - iteratively proposes parameter values and event sequences ("complete data") and then accepts/rejects the proposals according to a Metropolis-Hastings ratio
+    - technically can deal with an unobserved dimension, **but** it won't be computationally efficient (the latent space is very high-dimensional), and with this specific model there is an identifiability issue (due to the $kI$ and $d_I I$ terms)
+    
+
 
 ## References
 
