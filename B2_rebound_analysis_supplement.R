@@ -12,6 +12,9 @@ setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
 
 dat_log = readRDS("reboundB2_logTrans_CellCounts_A01.rds")
 
+## latest data version
+dat_log = readRDS("reboundB2_logTrans_CellCounts_AnimalInfo.rds")
+
 # 1. check out "A01" pos/neg
 # 1.1 KM curve stratified by A01 classification
 A01_KM = survfit(Surv(rebound_time_days_post_ati, observed)~A01, data=dat_log)
@@ -302,3 +305,58 @@ predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
                                  Cum_concordance = Cum_C_stats,
                                  LOOCV_deviance = LOO_deviance)
 predictor_inclusion
+
+
+## 07/13/2020
+## add a bit more visualization on the "chosen" model out of Lasso + Cox PH
+phmod_auc0_gp41 = coxph(Surv(rebound_time_days_post_ati, observed) ~ 
+                          pos_auc_0_weeks_post_ATI + log_peak_gp41, 
+                          data = dat_log)
+summary(phmod_auc0_gp41)
+### Summary:
+# Concordance= 0.864  (se = 0.061 )
+# Likelihood ratio test= 10.21  on 2 df,   p=0.006
+# Wald test            = 6.62  on 2 df,   p=0.04
+# Score (logrank) test = 8.74  on 2 df,   p=0.01
+
+
+## b) survival curves at representative values of each variable
+## i) fix peak GP41 at mean, vary AUC_0_week
+mean(dat_log$log_peak_gp41)
+# [1] 4.512378
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+
+auc0_fit = survfit(phmod_auc0_gp41, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values,
+                                        log_peak_gp41 = mean(dat_log$log_peak_gp41)))
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "Pos AUC \n0 weeks\npost ATI",
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           caption = "Fix log_peak_gp41 at 4.5 (mean)",
+           ggtheme = theme_bw(base_size = 14))
+
+## ii) fix AUC_0_week at mean, vary log peak VL
+sort(dat_log$log_peak_gp41)
+# [1] 3.929253 4.147115 4.153393 4.159597 4.495433 4.612036 4.826567 4.836934
+# [9] 4.846614 5.116840
+mean(dat_log$pos_auc_0_weeks_post_ATI)
+# [1] 0.24949
+peakgp41_values = c(4, 4.5, 5) # 4.5 is approximately the mean value
+
+peakgp41_fit = survfit(phmod_auc0_gp41, 
+                      newdata = data.frame(pos_auc_0_weeks_post_ATI = mean(dat_log$pos_auc_0_weeks_post_ATI),
+                                           log_peak_gp41 = peakgp41_values))
+ggsurvplot(peakgp41_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "Peak GP41 \nconcentration\n(log-scale)",
+           legend.labs=c("4.0", 
+                         "4.5(mean)",
+                         "5.0"),
+           caption = "Fix pos_auc_0_weeks_post_ATI at 0.25 (mean)",
+           ggtheme = theme_bw(base_size = 14))
