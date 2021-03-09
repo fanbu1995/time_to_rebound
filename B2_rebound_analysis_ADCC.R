@@ -2,6 +2,11 @@
 # B2 rebound analysis with ADCC and ADCP data added
 # as supplement to previous analysis
 
+# 11/09/2020
+# more stuff done:
+# 1. analysis without that not-rebounded animal
+# 2. analysis only focused on antibody responses (look at GP41 and GP120?)
+
 library(tidyverse)
 library(survival)
 library(survminer)
@@ -12,6 +17,24 @@ setwd("~/Documents/Research_and_References/HIV_rebound_summer2020/")
 ## latest data version
 dat_log = readRDS('reboundB2_logTrans_ADCC_ADCP.rds')
 
+## 11/09/20 tried: only focus on those who did rebound (sensitivity analysis)
+#dat_log = dat_log %>% filter(observed == 1)
+
+
+# 0. Visualize rebound time v.s. autogolous neutralization
+
+dat_log$auto_neut = factor(c(0,0,1,0,1,1,0,1,1,0), levels=c(1,0),
+                           labels=c('Yes','No'))
+
+autoNeut_KM = survfit(Surv(rebound_time_days_post_ati, observed)~auto_neut, 
+                     data=dat_log)
+ggsurvplot(autoNeut_KM,  
+           data = dat_log, 
+           censor.shape="|", censor.size = 4,
+           size = 1.5, #palette = c("#E7B800", "#2E9FDF"),
+           xlab='Days after ATI', ylab='No-rebound probability',
+           conf.int = FALSE,
+           ggtheme = theme_bw(base_size=14))
 
 # 1. Martingale test to check (non)linearity between 
 #    survival and ADCC/ADCP
@@ -43,6 +66,9 @@ for(v in Vars){
 dat_log = dat_log %>% 
   mutate(log_ADCC_week56 = log(ADCC_week56))
 
+
+# Univariate Concordance
+
 Response = "Surv(rebound_time_days_post_ati, observed)"
 All_covars = names(dat_log)[6:49]
 ## seems that log_ADCC_week56 doesn't make a difference by much
@@ -62,11 +88,39 @@ C_stats = data.frame(Predictor = All_covars, Concordance = C_stats)
 ## show it with descending rank
 C_stats %>% arrange(desc(Concordance))
 
+## get a table of concordance
+library(xtable)
+C_stats_top = C_stats %>% arrange(desc(Concordance)) %>%
+  slice(1:8)
+xtable(C_stats_top, digits = 4)
+
 ## only look at ADCC and ADCP
 C_stats %>% filter(Predictor %in%  c('ADCC_week56', 'ADCP_week62'))
 # ADCC: 0.523 (ranked #25 among 43)
 # ADCP: 0.500 (ranked #28 among 43)
 
+
+## survplot for AUC0
+phmod_auc0 = coxph(Surv(rebound_time_days_post_ati, observed) ~ 
+                        pos_auc_0_weeks_post_ATI, 
+                        data = dat_log)
+summary(phmod_auc0)
+
+## survival curves at representative values of AUC0
+## vary AUC_0_week
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+
+auc0_fit = survfit(phmod_auc0, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values))
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "Pos AUC \n0 weeks\npost ATI",
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           ggtheme = theme_bw(base_size = 14))
 
 
 # 3. Try out "Coxnet": using the `glmnet` package
@@ -199,6 +253,24 @@ dat_log_sel = dat_log %>%
 ## now: 25 predictors in the pool
 X = dat_log_sel[,3:27] %>% as.matrix()
 
+# (11/09/2020)
+# only include antibody response variables
+# (also convert Sex and A01 to numeric variables)
+dat_log_sel = dat_log %>% 
+  mutate(sex = ifelse(Sex == 'F', 0, 1),
+         MHC_A01 = ifelse(A01 == 'Pos', 1, 0)) %>%
+  select(rebound_time_days_post_ati, observed, 
+         Challenge_times, Dosage, 
+         sex, MHC_A01, 
+         log_peak_gp41, log_peak_gp120,
+         log_gp41_treat, log_gp120_treat,
+         log_point_ic50_0_weekspost_ATI:log_point_ic50_8_weekspost_ATI,
+         pos_auc_0_weeks_post_ATI:pos_auc_8_weeks_post_ATI,
+         ADCC_week56, ADCP_week62)
+
+## here: 18 predictors in the pool
+X = dat_log_sel[,3:20] %>% as.matrix()
+
 
 # 4.2 fit Lasso (alpha=1)
 phmod_lasso = glmnet(X, 
@@ -329,9 +401,16 @@ cv_phmod_lasso3 = cv.glmnet(X,
                                  dat_log_sel$observed),
                             family = "cox", nfolds = 10, keep = T)
 
+## 11/09/2020:
+## do stuff with only 9 data points (excluding RQc19)
+cv_phmod_lasso3 = cv.glmnet(X, 
+                            Surv(dat_log_sel$rebound_time_days_post_ati, 
+                                 dat_log_sel$observed),
+                            family = "cox", nfolds = 9, keep = T)
+
 pred_in2 = NULL
 LOO_deviance = NULL
-for(l in cv_phmod_lasso3$lambda){
+for(l in phmod_lasso$lambda){
   coefficients = coef(phmod_lasso, s = l)
   active_index = which(coefficients != 0)
   #active_coefficients = coefficients[active_index]
@@ -357,7 +436,9 @@ pred_in2 = pred_in2[pred_in2 %in% active_predictors]
 
 
 ## put together a summary table of this thing
-predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
+## (use 1:8 for the 9 data point version)
+predictor_inclusion = data.frame(#Inclusion_Rank = c(1:9),
+                                 Inclusion_Rank = c(1:7),
                                  Predictor = pred_in,
                                  Coefficient = coef_sign,
                                  Rebound_Effect = rebound_effect,
@@ -377,6 +458,9 @@ predictor_inclusion  = predictor_inclusion %>%
 
 
 xtable(predictor_inclusion, digits = 3)
+
+## only get top 7 rows for 9 data point 
+xtable(predictor_inclusion[1:7,], digits = 3)
 
 
 ## 07/13/2020
@@ -398,6 +482,23 @@ phmod_auc0_gp41_adcc = coxph(Surv(rebound_time_days_post_ati, observed) ~
                                ADCC_week56, 
                              data = dat_log)
 summary(phmod_auc0_gp41_adcc)
+
+## (11/09/2020)
+## plot coefficients and 95% CIs
+coefs = coef(phmod_auc0_gp41_adcc)
+names(coefs)[1] = 'pos_auc_0'
+coef_dat = data.frame(variable=names(coefs), coefficient = coefs)
+coef_dat = cbind(coef_dat, confint(phmod_auc0_gp41_adcc))
+names(coef_dat)[3:4] = c('LB',"UB")
+
+ggplot(data=coef_dat, aes(x=variable, y=coefficient)) +
+  geom_hline(yintercept = 0, size=1.5, color='darkgray') +
+  geom_errorbar(aes(ymin = LB, ymax = UB), size=1.2,
+                color='darkblue', width=0.2) +
+  geom_point(size=2, color='red') +
+  labs(x='predictor') +
+  coord_flip() +
+  theme_bw(base_size = 14)
 
 ## try out only AUC_0 and ADCC_week56??
 phmod_auc0_adcc = coxph(Surv(rebound_time_days_post_ati, observed) ~ 
@@ -474,4 +575,68 @@ ggsurvplot(ADCC_fit, conf.int = FALSE,
                          "26",
                          "31.5"),
            caption = "Fix pos_auc_0 at 0.25, log_peak_gp41 at 4.5 (mean)",
+           ggtheme = theme_bw(base_size = 14))
+
+
+## 11/09/2020
+# the model with only antibody response variables
+phmod_auc0_gp41treat = coxph(Surv(rebound_time_days_post_ati, observed) ~ 
+                          pos_auc_0_weeks_post_ATI + log_gp41_treat, 
+                        data = dat_log)
+summary(phmod_auc0_gp41treat)
+
+## plot coefficients and 95% CIs
+coefs = coef(phmod_auc0_gp41treat)
+names(coefs)[1] = 'pos_auc_0'
+coef_dat = data.frame(variable=names(coefs), coefficient = coefs)
+coef_dat = cbind(coef_dat, confint(phmod_auc0_gp41treat))
+names(coef_dat)[3:4] = c('LB',"UB")
+
+ggplot(data=coef_dat, aes(x=variable, y=coefficient)) +
+  geom_hline(yintercept = 0, size=1.5, color='darkgray') +
+  geom_errorbar(aes(ymin = LB, ymax = UB), size=1.2,
+                color='darkblue', width=0.2) +
+  geom_point(size=3, color='red') +
+  labs(x='predictor') +
+  coord_flip() +
+  theme_bw(base_size = 14)
+
+## visualization of survival curves
+### i) fix log_gp41_treat
+mean(dat_log$log_gp41_treat)
+# [1] 4.491903
+
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+
+auc0_fit = survfit(phmod_auc0_gp41treat, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values,
+                                        log_gp41_treat = mean(dat_log$log_gp41_treat)))
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "Pos AUC \n0 weeks\npost ATI",
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           caption = "Fix log_gp41_treat at 4.5(mean)",
+           ggtheme = theme_bw(base_size = 14))
+
+## ii) fix pos_auc_0_weeks_post_ATI
+sort(dat_log$log_gp41_treat)
+
+gp41_treat_values = c(3.9, 4.5, 5.1)
+
+gp41_treat_fit = survfit(phmod_auc0_gp41treat, 
+                         newdata = data.frame(pos_auc_0_weeks_post_ATI = mean(dat_log$pos_auc_0_weeks_post_ATI),
+                                              log_gp41_treat = gp41_treat_values))
+
+ggsurvplot(gp41_treat_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "GP41 (log-scale)\nconcentration\nat treatment",
+           legend.labs=c("3.9", 
+                         "4.5(mean)",
+                         "5.1"),
+           caption = "Fix pos_auc_0 at 0.25(mean)",
            ggtheme = theme_bw(base_size = 14))

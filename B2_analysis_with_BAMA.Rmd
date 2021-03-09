@@ -1,0 +1,207 @@
+---
+title: "B2_analysis_with_BAMA"
+author: "Fan Bu"
+date: "3/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = '~/Documents/Research_and_References/HIV_rebound_summer2020/')
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(survival)
+library(survminer)
+library(glmnet)
+library(stringr)
+```
+
+
+## Multivariate analysis with BAMA data
+Load data.
+```{r}
+dat_log = readRDS('reboundB2_logTrans_ADCC_ADCP.rds')
+bama.dat = readRDS('BAMA_data_clean.rds')
+```
+
+Select the covariates required for the re-analysis from the previous dataset.
+```{r}
+sel = c(1:11, 21:23, 43:44, 46:48)
+dat_log_sel = dat_log[,sel]
+```
+
+Then combine the dataset with select BAMA variables
+```{r}
+bama_sel = bama.dat %>% arrange(animal_id) %>%
+  select(SHIV.CH505TF.V2_week8, SHIV.CH505TF.V2_ATI,
+         SHIV.CH505TF.V1V2_week8, SHIV.CH505TF.V1V2_ATI,
+         SHIV.CH505TF.V3_week8, SHIV.CH505TF.V3_ATI,
+         SIVmac239.p27_week8, SIVmac239.p27_ATI,
+         SIVmac251.Nef_week8, SIVmac251.Nef_ATI)
+dat_log_sel = cbind(dat_log_sel, bama_sel)
+```
+
+Make the "Sex" and "A01" columns numeric so that we can run LASSO.
+```{r}
+dat_log_sel = dat_log_sel %>% 
+  mutate(Sex = if_else(Sex=='M', 0, 1),
+         A01 = if_else(A01=='Neg', 0, 1))
+```
+
+Run Cox PH with Lasso.
+```{r}
+X = dat_log_sel[,6:29] %>% as.matrix()
+
+phmod_lasso = glmnet(X, 
+                     Surv(dat_log_sel$rebound_time_days_post_ati, 
+                          dat_log_sel$observed),
+                     family = "cox")
+```
+
+Get a "predictor inclusion" ranking table.
+```{r, message=FALSE, warning=FALSE}
+set.seed(42)
+
+# get inclusion order
+pred_in = NULL
+coef_sign = NULL
+
+for(l in phmod_lasso$lambda){
+  coefficients = coef(phmod_lasso, s = l)
+  active_index = which(coefficients != 0)
+  active_coefficients = coefficients[active_index]
+  active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+  
+  #cat(active_predictors, "\n")
+  
+  if(any(!active_predictors %in% pred_in)){
+    #cat('Added new predictors! Now active:', active_predictors, '\n')
+    
+    new_index = which(!active_predictors %in% pred_in)
+    pred_in = c(pred_in, active_predictors[new_index])
+    new_coef_sign = ifelse(active_coefficients[new_index] > 0, 
+                           "+", "-")
+    coef_sign = c(coef_sign, new_coef_sign)
+  }
+}
+
+# focus on those that are eventually selected...
+coef_sign = coef_sign[pred_in %in% active_predictors]
+pred_in = pred_in[pred_in %in% active_predictors]
+
+# rebound effect
+rebound_effect = sapply(coef_sign, 
+                        function(x) ifelse(x=="+","accelerate","delay")) %>%
+  as.vector()
+
+# multivariate concordance (C-statistic)
+Response = "Surv(rebound_time_days_post_ati, observed)"
+
+Cum_C_stats = NULL
+for(i in 1:length(pred_in)){
+  covars = pred_in[1:i]
+  f = as.formula(paste(Response,paste(covars,collapse = "+"),sep = " ~ "))
+  mod = coxph(f, data=dat_log_sel)
+  C_covars = mod$concordance['concordance'] %>% as.numeric()
+  Cum_C_stats = c(Cum_C_stats, C_covars)
+}
+
+# leave-one-out CV error
+cv_phmod_lasso3 = cv.glmnet(X, 
+                            Surv(dat_log_sel$rebound_time_days_post_ati, 
+                                 dat_log_sel$observed),
+                            family = "cox", nfolds = 10, keep = T)
+pred_in2 = NULL
+LOO_deviance = NULL
+for(l in phmod_lasso$lambda){
+  coefficients = coef(phmod_lasso, s = l)
+  active_index = which(coefficients != 0)
+  #active_coefficients = coefficients[active_index]
+  active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+  
+  #cat(active_predictors, "\n")
+  
+  if(any(!active_predictors %in% pred_in2)){
+    new_index = which(!active_predictors %in% pred_in2)
+    pred_in2 = c(pred_in2, active_predictors[new_index])
+    
+    l_index = which(cv_phmod_lasso3$lambda == l)
+    LOO_deviance = c(LOO_deviance, cv_phmod_lasso3$cvm[l_index])
+  }
+}
+
+LOO_deviance = LOO_deviance[pred_in2 %in% active_predictors]
+pred_in2 = pred_in2[pred_in2 %in% active_predictors]
+```
+
+Put together a summary table.
+```{r}
+predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
+                                 Predictor = pred_in,
+                                 #Coefficient = coef_sign,
+                                 Rebound_Effect = rebound_effect,
+                                 Cum_concordance = Cum_C_stats,
+                                 LOOCV_deviance = LOO_deviance)
+predictor_inclusion
+```
+
+Still, the most important predictor (first to include) is `Pos AUC at ATI`.
+
+
+## Test the significance of all BAMA variables
+For each BAMA variable, we use (1) value at ATI, and (2) difference between week 8 and ATI. Only adjust for `Sex`, `A01 type`, and `Dosage`.
+
+```{r}
+bama.vars = names(bama.dat)
+sel_col = str_detect(bama.vars, '(diff)|(ATI)')
+dat = cbind(dat_log[,c(1,4,5,43,44,46)], bama.dat[,sel_col])
+```
+
+Run a Cox PH model for each variable and get p values.
+```{r}
+# try not including `Sex` (or `A01`) with the GP140 stuff
+# - there seems to be some numeric problems
+p_vals = NULL
+Response = "Surv(rebound_time_days_post_ati, observed)"
+f_st = paste(Response, 'A01 + Sex + Dosage', sep=' ~ ')
+#f_st = paste(Response, 'A01 + Dosage', sep=' ~ ')
+#f_st = paste(Response, 'Sex + Dosage', sep=' ~ ')
+bamas = bama.vars[sel_col]
+for(i in seq(1,length(bamas),by=2)){
+  sel_var = bamas[c(i,i+1)]
+  if(str_detect(sel_var[1],'gp140')){
+    f_st1 = paste(Response, 'A01 + Dosage', sep=' ~ ')
+    f = as.formula(paste(f_st1, paste(sel_var,collapse = ' + '),sep='+'))
+  }else{
+    f = as.formula(paste(f_st, paste(sel_var,collapse = ' + '),sep='+'))
+  }
+  phm = coxph(f, data=dat)
+  this.ps = summary(phm)$coefficients[,5][sel_var]
+  p_vals = c(p_vals, this.ps)
+}
+```
+
+Inspect the p-values, and also look at the q-values (FDRs). Here we only show the 10 smallest.
+```{r}
+#p_vals
+sort(p_vals)[1:10]
+```
+
+```{r}
+q_vals = p.adjust(p_vals, method = 'fdr')
+sort(q_vals)
+```
+
+The model with `p27`.
+```{r}
+m_p27 = coxph(Surv(rebound_time_days_post_ati, observed) ~
+                A01 + Sex + Dosage + SIVmac239.p27_ART_diff + 
+                SIVmac239.p27_ATI,
+              data = dat)
+summary(m_p27)
+```
+
+
+
