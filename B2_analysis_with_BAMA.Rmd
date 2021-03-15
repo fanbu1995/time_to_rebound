@@ -51,8 +51,12 @@ dat_log_sel = dat_log_sel %>%
 ```
 
 Run Cox PH with Lasso.
+(Also tried a version without adjusting for Sex and A01...)
 ```{r}
 X = dat_log_sel[,6:29] %>% as.matrix()
+
+# take out Sex and A01...
+# X = dat_log_sel[,6:29][,-c(10,11)] %>% as.matrix()
 
 phmod_lasso = glmnet(X, 
                      Surv(dat_log_sel$rebound_time_days_post_ati, 
@@ -149,6 +153,39 @@ predictor_inclusion
 
 Still, the most important predictor (first to include) is `Pos AUC at ATI`.
 
+Visualize the effect by KM curves.
+```{r}
+phmod_auc0_Sex = coxph(Surv(rebound_time_days_post_ati, observed) ~ 
+                          pos_auc_0_weeks_post_ATI + Sex, 
+                        data = dat_log_sel)
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+
+# Sex=female first
+auc0_fit = survfit(phmod_auc0_Sex, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values,
+                                        Sex = 1)) # set Male as the baseline
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "right",
+           legend.title = "Pos AUC \n0 weeks\npost ATI",
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           caption = "Fix Sex as Female",
+           ggtheme = theme_bw(base_size = 14))
+
+# Then Sex=male
+auc0_fit = survfit(phmod_auc0_Sex, 
+                   newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values,
+                                        Sex = 0)) # set Male as the baseline
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log,
+           legend = "none",
+           caption = "Fix Sex as Male",
+           ggtheme = theme_bw(base_size = 14))
+```
+
 
 ## Test the significance of all BAMA variables
 For each BAMA variable, we use (1) value at ATI, and (2) difference between week 8 and ATI. Only adjust for `Sex`, `A01 type`, and `Dosage`.
@@ -203,5 +240,16 @@ m_p27 = coxph(Surv(rebound_time_days_post_ati, observed) ~
 summary(m_p27)
 ```
 
+Put together a summary table of p-values and q-values (only the top ones with smallest p-vals).
+```{r}
+tops = order(p_vals)[1:6]
+bama_tabs = data.frame(Predictor = bamas[tops],
+                       p.values = p_vals[tops],
+                       q.values = q_vals[tops])
+write.table(format(bama_tabs, digits=3), 
+            'BAMA_p_values.txt',
+            quote=FALSE, row.names = FALSE,
+            sep = ',')
+```
 
 
