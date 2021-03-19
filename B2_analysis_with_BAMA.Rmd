@@ -22,13 +22,19 @@ library(stringr)
 ## Multivariate analysis with BAMA data
 Load data.
 ```{r}
-dat_log = readRDS('reboundB2_logTrans_ADCC_ADCP.rds')
+#dat_log = readRDS('reboundB2_logTrans_ADCC_ADCP.rds')
+# update version: include more timepoints of measurements
+# for GP41, GP120, ADCC & ADCP
+dat_log = readRDS('reboundB2_logTrans_032021.rds')
 bama.dat = readRDS('BAMA_data_clean.rds')
 ```
 
+
+
 Select the covariates required for the re-analysis from the previous dataset.
 ```{r}
-sel = c(1:11, 21:23, 43:44, 46:48)
+#sel = c(1:11, 21:23, 43:44, 46:48)
+sel = c(1:11, 21:23, 43:44, 46:52) #include more covars, March 2021
 dat_log_sel = dat_log[,sel]
 ```
 
@@ -45,15 +51,18 @@ dat_log_sel = cbind(dat_log_sel, bama_sel)
 
 Make the "Sex" and "A01" columns numeric so that we can run LASSO.
 ```{r}
+# March 18, 2021 update: Sex baseline to Female (F=0, M=1)
 dat_log_sel = dat_log_sel %>% 
-  mutate(Sex = if_else(Sex=='M', 0, 1),
+  mutate(Sex = if_else(Sex=='F', 0, 1),
          A01 = if_else(A01=='Neg', 0, 1))
 ```
 
 Run Cox PH with Lasso.
 (Also tried a version without adjusting for Sex and A01...)
 ```{r}
-X = dat_log_sel[,6:29] %>% as.matrix()
+#X = dat_log_sel[,6:29] %>% as.matrix()
+
+X = dat_log_sel[,6:33] %>% as.matrix()
 
 # take out Sex and A01...
 # X = dat_log_sel[,6:29][,-c(10,11)] %>% as.matrix()
@@ -72,6 +81,7 @@ set.seed(42)
 pred_in = NULL
 coef_sign = NULL
 
+# stop when num. of active predictors is > 7
 for(l in phmod_lasso$lambda){
   coefficients = coef(phmod_lasso, s = l)
   active_index = which(coefficients != 0)
@@ -79,6 +89,7 @@ for(l in phmod_lasso$lambda){
   active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
   
   #cat(active_predictors, "\n")
+  if(length(active_index) > 7){ break }
   
   if(any(!active_predictors %in% pred_in)){
     #cat('Added new predictors! Now active:', active_predictors, '\n')
@@ -92,8 +103,8 @@ for(l in phmod_lasso$lambda){
 }
 
 # focus on those that are eventually selected...
-coef_sign = coef_sign[pred_in %in% active_predictors]
-pred_in = pred_in[pred_in %in% active_predictors]
+#coef_sign = coef_sign[pred_in %in% active_predictors]
+#pred_in = pred_in[pred_in %in% active_predictors]
 
 # rebound effect
 rebound_effect = sapply(coef_sign, 
@@ -127,6 +138,8 @@ for(l in phmod_lasso$lambda){
   
   #cat(active_predictors, "\n")
   
+  if(length(active_index) > 7){ break }
+  
   if(any(!active_predictors %in% pred_in2)){
     new_index = which(!active_predictors %in% pred_in2)
     pred_in2 = c(pred_in2, active_predictors[new_index])
@@ -136,13 +149,13 @@ for(l in phmod_lasso$lambda){
   }
 }
 
-LOO_deviance = LOO_deviance[pred_in2 %in% active_predictors]
-pred_in2 = pred_in2[pred_in2 %in% active_predictors]
+#LOO_deviance = LOO_deviance[pred_in2 %in% active_predictors]
+#pred_in2 = pred_in2[pred_in2 %in% active_predictors]
 ```
 
 Put together a summary table.
 ```{r}
-predictor_inclusion = data.frame(Inclusion_Rank = c(1:9),
+predictor_inclusion = data.frame(Inclusion_Rank = c(1:length(pred_in)),
                                  Predictor = pred_in,
                                  #Coefficient = coef_sign,
                                  Rebound_Effect = rebound_effect,
@@ -153,7 +166,17 @@ predictor_inclusion
 
 Still, the most important predictor (first to include) is `Pos AUC at ATI`.
 
+Save the inclusion ranking table to a txt file for Word usage
+```{r}
+write.table(format(predictor_inclusion, digits=3), 
+            'predictor_inclusion_table.txt',
+            quote=FALSE, row.names = FALSE,
+            sep = ',')
+```
+
+
 Visualize the effect by KM curves.
+(Chunk below is deleted as `Sex` is no longer the 2nd predictor.)
 ```{r}
 phmod_auc0_Sex = coxph(Surv(rebound_time_days_post_ati, observed) ~ 
                           pos_auc_0_weeks_post_ATI + Sex, 
@@ -163,7 +186,7 @@ auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
 # Sex=female first
 auc0_fit = survfit(phmod_auc0_Sex, 
                    newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values,
-                                        Sex = 1)) # set Male as the baseline
+                                        Sex = 0)) 
 ggsurvplot(auc0_fit, conf.int = FALSE, 
            data = dat_log,
            legend = "right",
@@ -178,13 +201,213 @@ ggsurvplot(auc0_fit, conf.int = FALSE,
 # Then Sex=male
 auc0_fit = survfit(phmod_auc0_Sex, 
                    newdata = data.frame(pos_auc_0_weeks_post_ATI = auc0_values,
-                                        Sex = 0)) # set Male as the baseline
+                                        Sex = 1)) 
 ggsurvplot(auc0_fit, conf.int = FALSE, 
            data = dat_log,
            legend = "none",
            caption = "Fix Sex as Male",
            ggtheme = theme_bw(base_size = 14))
 ```
+
+Check out the model using `Pos_AUC_0` and `ADCP_week8`.
+
+Effect of `Pos_AUC_0` is significant but effect of `ADCP_week8` is **not**.
+
+```{r}
+phmod_auc0_adcp = coxph(Surv(rebound_time_days_post_ati, observed) ~
+                          pos_auc_0_weeks_post_ATI + ADCP_week8, 
+                        data = dat_log_sel)
+summary(phmod_auc0_adcp)
+```
+
+Plot effect of `pos_auc_0` when fixing `ADCP_week8` at mean value.
+
+```{r}
+mean(dat_log_sel$ADCP_week8) # 14.5878
+
+auc0_values = c(0.15, 0.25, 0.3, 0.4) # 0.25 is approximately the mean
+
+auc0_fit = survfit(phmod_auc0_adcp, 
+                   newdata = data.frame(
+                     pos_auc_0_weeks_post_ATI = auc0_values,
+                     ADCP_week8 = mean(dat_log_sel$ADCP_week8)))
+ggsurvplot(auc0_fit, conf.int = FALSE, 
+           data = dat_log_sel,
+           legend = "right",
+           legend.title = "Pos AUC \n0 weeks\npost ATI",
+           legend.labs=c("0.15", 
+                         "0.25(mean)",
+                         "0.30",
+                         "0.40"),
+           caption = "Fix ADCP_week8 at 14.6 (mean)",
+           ggtheme = theme_bw(base_size = 14))
+```
+
+Then plot effect of `ADCP_week8` while fixing `Pos_AUC_0` at mean value.
+```{r}
+#sort(dat_log_sel$ADCP_week8)
+
+adcp_values = c(11, 14.6, 17, 19) # 14.6 is approx. the mean
+
+adcp_fit = survfit(phmod_auc0_adcp, 
+                   newdata = data.frame(
+                     pos_auc_0_weeks_post_ATI =
+                       mean(dat_log_sel$pos_auc_0_weeks_post_ATI),
+                     ADCP_week8 = adcp_values))
+ggsurvplot(adcp_fit, conf.int = FALSE, 
+           data = dat_log_sel,
+           legend = "right",
+           legend.title = "ADCP(%) \n0 Week 8",
+           legend.labs=c("11.0", 
+                         "14.6(mean)",
+                         "17.0",
+                         "19.0"),
+           caption = "Fix Pos_AUC_0 at 0.25 (mean)",
+           ggtheme = theme_bw(base_size = 14))
+```
+
+
+
+
+## Run Multivariate Cox PH model with Lasso for variable selection using ALL biomarker predictors used in previous analysis
+
+Include all variables used in previous analysis (the antibody response covariates).
+```{r}
+dat_log_prev = dat_log %>%
+  mutate(Sex = if_else(Sex=='F', 0, 1),
+         A01 = if_else(A01=='Neg', 0, 1)) %>%
+  select(rebound_time_days_post_ati, observed, 
+         Challenge_times, Dosage, 
+         Sex, A01, 
+         log_peak_gp41, log_peak_gp120,
+         log_gp41_treat, log_gp120_treat,
+         log_point_ic50_0_weekspost_ATI:log_point_ic50_8_weekspost_ATI,
+         pos_auc_0_weeks_post_ATI:pos_auc_8_weeks_post_ATI,
+         ADCC_week56:ADCP_week8, 
+         log_gp41_ATI, log_gp120_ATI)
+dat_log_bama = dat_log_sel %>% 
+  select(SHIV.CH505TF.V2_week8:SIVmac251.Nef_ATI)
+dat_log_sel = cbind(dat_log_prev, dat_log_bama)
+```
+
+Then run Lasso+Cox PH model.
+```{r}
+# X = dat_log_sel[,3:34] %>% as.matrix()
+
+# also do a version without BAMA data
+X = dat_log_sel[,3:24] %>% as.matrix()
+
+phmod_lasso = glmnet(X, 
+                     Surv(dat_log_sel$rebound_time_days_post_ati, 
+                          dat_log_sel$observed),
+                     family = "cox")
+```
+
+Get a "predictor inclusion" ranking table.
+```{r, message=FALSE, warning=FALSE}
+set.seed(42)
+
+# get inclusion order
+pred_in = NULL
+coef_sign = NULL
+
+# hard stop when #(active pred.) >= 7
+for(l in phmod_lasso$lambda){
+  coefficients = coef(phmod_lasso, s = l)
+  active_index = which(coefficients != 0)
+  active_coefficients = coefficients[active_index]
+  active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+  
+  if(length(active_index)>7){ break }
+  
+  #cat(active_predictors, "\n")
+  
+  if(any(!active_predictors %in% pred_in)){
+    #cat('Added new predictors! Now active:', active_predictors, '\n')
+    
+    new_index = which(!active_predictors %in% pred_in)
+    pred_in = c(pred_in, active_predictors[new_index])
+    new_coef_sign = ifelse(active_coefficients[new_index] > 0, 
+                           "+", "-")
+    coef_sign = c(coef_sign, new_coef_sign)
+  }
+}
+
+# focus on those that are eventually selected...
+
+#coef_sign = coef_sign[pred_in %in% active_predictors]
+#pred_in = pred_in[pred_in %in% active_predictors]
+
+# rebound effect
+rebound_effect = sapply(coef_sign, 
+                        function(x) ifelse(x=="+","accelerate","delay")) %>%
+  as.vector()
+
+# multivariate concordance (C-statistic)
+Response = "Surv(rebound_time_days_post_ati, observed)"
+
+Cum_C_stats = NULL
+for(i in 1:length(pred_in)){
+  covars = pred_in[1:i]
+  f = as.formula(paste(Response,paste(covars,collapse = "+"),sep = " ~ "))
+  mod = coxph(f, data=dat_log_sel)
+  C_covars = mod$concordance['concordance'] %>% as.numeric()
+  Cum_C_stats = c(Cum_C_stats, C_covars)
+}
+
+# leave-one-out CV error
+cv_phmod_lasso3 = cv.glmnet(X, 
+                            Surv(dat_log_sel$rebound_time_days_post_ati, 
+                                 dat_log_sel$observed),
+                            family = "cox", nfolds = 10, keep = T)
+pred_in2 = NULL
+LOO_deviance = NULL
+
+# again, hard stop when #(actiev pred.) > 7
+for(l in phmod_lasso$lambda){
+  coefficients = coef(phmod_lasso, s = l)
+  active_index = which(coefficients != 0)
+  #active_coefficients = coefficients[active_index]
+  active_predictors = attr(coefficients,"Dimnames")[[1]][active_index]
+  
+  #cat(active_predictors, "\n")
+  if(length(active_index)>7){ break }
+  
+  if(any(!active_predictors %in% pred_in2)){
+    new_index = which(!active_predictors %in% pred_in2)
+    pred_in2 = c(pred_in2, active_predictors[new_index])
+    
+    l_index = which(cv_phmod_lasso3$lambda == l)
+    LOO_deviance = c(LOO_deviance, cv_phmod_lasso3$cvm[l_index])
+  }
+}
+
+#LOO_deviance = LOO_deviance[pred_in2 %in% active_predictors]
+#pred_in2 = pred_in2[pred_in2 %in% active_predictors]
+```
+
+Put together a summary table.
+```{r}
+predictor_inclusion = data.frame(Inclusion_Rank = c(1:length(pred_in)),
+                                 Predictor = pred_in,
+                                 #Coefficient = coef_sign,
+                                 Rebound_Effect = rebound_effect,
+                                 Cum_concordance = Cum_C_stats,
+                                 LOOCV_deviance = LOO_deviance)
+predictor_inclusion
+```
+
+Save the table as txt file for Word use.
+```{r}
+write.table(format(predictor_inclusion, digits=3), 
+            'predictor_inclusion_table_wo_BAMA.txt',
+            quote=FALSE, row.names = FALSE,
+            sep = ',')
+```
+
+
+KM curves to visualize the effects.
+
 
 
 ## Test the significance of all BAMA variables

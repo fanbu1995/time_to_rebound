@@ -1,6 +1,9 @@
 # 11/04/2020
 # process ADCP and ADCC data
 
+# 03/18/2021
+# update: extract measurements at week 8 (start of ART) as well
+
 library(tidyverse)
 library(readxl)
 
@@ -44,3 +47,40 @@ dat$ADCP_week62 = adcp$ADCP_week62
 
 # 4. save it 
 saveRDS(dat, 'reboundB2_logTrans_ADCC_ADCP.rds')
+
+
+# 03/18/2021
+# add week 8 measurements as well
+
+dat = readRDS('reboundB2_logTrans_ADCC_ADCP.rds')
+
+# 1. ADCC
+adcc = adcc %>% filter(week_challenge == 8) %>%
+  select(animal_id, 11) %>%
+  arrange(animal_id)
+
+# check animal ids match up
+adcc$animal_id == dat$animal_id
+
+# change col name of ADCC
+names(adcc)[2] = 'ADCC_week8'
+glimpse(adcc)
+
+# 2. ADCP
+adcp = adcp %>% filter(week_challenge == 8) %>%
+  select(animal_id, 11) %>%
+  arrange(animal_id)
+
+# check animal ids match up
+adcp$animal_id == dat$animal_id
+
+# change col name of ADCP
+names(adcp)[2] = 'ADCP_week8'
+glimpse(adcp)
+
+# 3. add to dataset
+dat$ADCC_week8 = adcc$ADCC_week8
+dat$ADCP_week8 = adcp$ADCP_week8
+
+# 4. save it
+saveRDS(dat, 'reboundB2_logTrans_032021.rds')
