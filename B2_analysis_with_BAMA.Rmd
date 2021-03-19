@@ -257,7 +257,7 @@ adcp_fit = survfit(phmod_auc0_adcp,
 ggsurvplot(adcp_fit, conf.int = FALSE, 
            data = dat_log_sel,
            legend = "right",
-           legend.title = "ADCP(%) \n0 Week 8",
+           legend.title = "ADCP(%) \n Week 8",
            legend.labs=c("11.0", 
                          "14.6(mean)",
                          "17.0",
@@ -267,12 +267,31 @@ ggsurvplot(adcp_fit, conf.int = FALSE,
 ```
 
 
+Stratify the dataset to two halves: one with high `Pos_AUC_0` values and another with low `Pos_AUC_0` values.
+
+```{r}
+dat_top = dat_log_sel[rank(dat_log_sel$pos_auc_0_weeks_post_ATI)>=6,]
+dat_bot = dat_log_sel[rank(dat_log_sel$pos_auc_0_weeks_post_ATI)<=5,]
+
+# the low Pos_AUC half
+summary(coxph(Surv(rebound_time_days_post_ati, observed)~ADCP_week8, data=dat_bot))
+
+# the high Pos_AUC half
+summary(coxph(Surv(rebound_time_days_post_ati, observed)~ADCP_week8, data=dat_top))
+```
+
+Compare with a model with only `ADCP_week8` as the predictor.
+```{r}
+summary(coxph(Surv(rebound_time_days_post_ati, observed)~ADCP_week8, data=dat_log_sel))
+```
+
 
 
 ## Run Multivariate Cox PH model with Lasso for variable selection using ALL biomarker predictors used in previous analysis
 
 Include all variables used in previous analysis (the antibody response covariates).
 ```{r}
+# add viral load + CD4/CD8 cell counts as well
 dat_log_prev = dat_log %>%
   mutate(Sex = if_else(Sex=='F', 0, 1),
          A01 = if_else(A01=='Neg', 0, 1)) %>%
@@ -284,7 +303,10 @@ dat_log_prev = dat_log %>%
          log_point_ic50_0_weekspost_ATI:log_point_ic50_8_weekspost_ATI,
          pos_auc_0_weeks_post_ATI:pos_auc_8_weeks_post_ATI,
          ADCC_week56:ADCP_week8, 
-         log_gp41_ATI, log_gp120_ATI)
+         log_gp41_ATI, log_gp120_ATI,
+         log_peak_vl, log_vl_treat,
+         #log_RNA_copies_blood_8:log_RNA_copies_RB_56,
+         log_Abs_CD4_week0:log_Abs_CD8_week8)
 dat_log_bama = dat_log_sel %>% 
   select(SHIV.CH505TF.V2_week8:SIVmac251.Nef_ATI)
 dat_log_sel = cbind(dat_log_prev, dat_log_bama)
@@ -292,10 +314,10 @@ dat_log_sel = cbind(dat_log_prev, dat_log_bama)
 
 Then run Lasso+Cox PH model.
 ```{r}
-# X = dat_log_sel[,3:34] %>% as.matrix()
+# X = dat_log_sel[,3:42] %>% as.matrix()
 
 # also do a version without BAMA data
-X = dat_log_sel[,3:24] %>% as.matrix()
+X = dat_log_sel[,3:32] %>% as.matrix()
 
 phmod_lasso = glmnet(X, 
                      Surv(dat_log_sel$rebound_time_days_post_ati, 
@@ -388,18 +410,27 @@ for(l in phmod_lasso$lambda){
 
 Put together a summary table.
 ```{r}
-predictor_inclusion = data.frame(Inclusion_Rank = c(1:length(pred_in)),
-                                 Predictor = pred_in,
+# predictor_inclusion = data.frame(Inclusion_Rank = c(1:length(LOO_deviance)),
+#                                  Predictor = pred_in,
+#                                  #Coefficient = coef_sign,
+#                                  Rebound_Effect = rebound_effect,
+#                                  Cum_concordance = Cum_C_stats,
+#                                  LOOCV_deviance = LOO_deviance)
+
+predictor_inclusion = data.frame(Inclusion_Rank = c(1:7),
+                                 Predictor = pred_in[1:7],
                                  #Coefficient = coef_sign,
-                                 Rebound_Effect = rebound_effect,
-                                 Cum_concordance = Cum_C_stats,
-                                 LOOCV_deviance = LOO_deviance)
+                                 Rebound_Effect = rebound_effect[1:7],
+                                 Cum_concordance = Cum_C_stats[1:7],
+                                 LOOCV_deviance = LOO_deviance[1:7])
+
 predictor_inclusion
 ```
 
 Save the table as txt file for Word use.
 ```{r}
 write.table(format(predictor_inclusion, digits=3), 
+            #'predictor_inclusion_table_BAMA.txt',
             'predictor_inclusion_table_wo_BAMA.txt',
             quote=FALSE, row.names = FALSE,
             sep = ',')
